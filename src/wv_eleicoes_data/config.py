@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     )
 
     database_url: SecretStr
+    ingestion_database_url: SecretStr | None = None
 
 
 @lru_cache
