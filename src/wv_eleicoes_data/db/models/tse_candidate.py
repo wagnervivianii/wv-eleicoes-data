@@ -18,7 +18,7 @@ class TseCandidate(Base):
 
     SQ_CANDIDATO is an election candidacy identifier, not a person identity.
     CPF, voter registration and email must remain internal.
-    Source row numbers are one-based data row positions (excluding the header).
+    Source row numbers are physical CSV starting lines (first data row = 2).
     """
 
     __tablename__ = "tse_candidate"

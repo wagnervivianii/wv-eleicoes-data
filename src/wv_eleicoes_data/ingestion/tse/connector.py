@@ -5,6 +5,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime
+from io import TextIOWrapper
 from pathlib import Path, PurePosixPath
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -140,6 +141,8 @@ class TseCandidatesConnector:
         try:
             with ZipFile(path) as archive:
                 self._validate_archive_paths(archive)
+                if archive.namelist().count(self.contract.canonical_csv_name) != 1:
+                    raise TseIngestionError("canonical TSE CSV must occur exactly once")
                 row_count, source_updated_at = self._inspect_canonical_csv(archive)
         except BadZipFile as exc:
             raise TseIngestionError("downloaded TSE artifact is a corrupt ZIP") from exc
@@ -216,12 +219,14 @@ class TseCandidatesConnector:
         generation_value: tuple[str, str] | None = None
         row_count = 0
 
-        with raw_file:
-            lines = (line.decode(self.contract.encoding) for line in raw_file)
+        with raw_file, TextIOWrapper(
+            raw_file, encoding=self.contract.encoding, newline=""
+        ) as lines:
             reader = csv.reader(
                 lines,
                 delimiter=self.contract.delimiter,
                 quotechar=self.contract.quotechar,
+                strict=True,
             )
 
             try:
