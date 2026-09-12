@@ -10,7 +10,6 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateTable
 
 from wv_eleicoes_data.db.base import Base
 from wv_eleicoes_data.db.models import TseCandidate
@@ -80,9 +79,9 @@ def test_lossless_storage_and_provenance_uniqueness() -> None:
         assert connection.scalar(sa.select(sa.func.count()).select_from(TABLE)) == 4
 
 
-def test_migration_matches_model_and_linear_history() -> None:
+def test_frozen_migration_ddl_and_linear_history() -> None:
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert scripts.get_heads() == ["8c31b79e5a02"]
+    assert len(scripts.get_heads()) == 1
     revision = scripts.get_revision("8c31b79e5a02")
     assert revision is not None
     assert revision.down_revision == "2ae610ff28cd"
@@ -101,9 +100,12 @@ def test_migration_matches_model_and_linear_history() -> None:
     with patch.object(migration, "op", operations):
         migration.upgrade()
         migration.downgrade()
-    expected = str(CreateTable(TABLE).compile(dialect=postgresql.dialect()))
+    # This fixture belongs to this revision, independently of future ORM/contracts.
+    expected = (Path(__file__).parent / "fixtures" / "8c31b79e5a02.sql").read_text()
+    assert len(statements) == 2
     # Constraint ordering is immaterial and may differ between metadata instances.
-    assert sorted(line.strip().rstrip(",") for line in statements[0].splitlines()) == sorted(
-        line.strip().rstrip(",") for line in expected.splitlines()
+    actual_lines = statements[0].strip().splitlines()
+    assert sorted(line.strip().rstrip(",") for line in actual_lines) == sorted(
+        line.strip().rstrip(",") for line in expected.strip().splitlines()
     )
     assert statements[1].strip() == "DROP TABLE raw.tse_candidate"
