@@ -121,6 +121,7 @@ def test_postgresql_backfill_and_current_projection(request):
             changes = sa.Table(
                 "candidate_change", sa.MetaData(), schema="audit", autoload_with=conn
             )
+            from wv_eleicoes_data.db.models import CandidateChange
             assert changes.c.source_snapshot_at.type.timezone
             assert changes.c.detected_at.type.timezone
             assert changes.c.changed_fields.type.__class__.__name__ == "JSONB"
@@ -134,8 +135,10 @@ def test_postgresql_backfill_and_current_projection(request):
                 "ix_audit_candidate_change_candidacy_history",
             } <= index_names
             snapshot_at = datetime(2026, 9, 13, 3, 0, tzinfo=UTC)
+            # Use the application model for writes: its JSON/JSONB mapping has
+            # none_as_null=True, which is part of the persistence contract for A/D.
             conn.execute(
-                changes.insert().values(
+                sa.insert(CandidateChange).values(
                     run_id=3,
                     change_type="A",
                     ano_eleicao="2026",
