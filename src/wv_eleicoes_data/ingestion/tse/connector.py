@@ -28,7 +28,7 @@ class TseRetryableHttpError(TseIngestionError):
 
 @dataclass(frozen=True, slots=True)
 class TseResourceMetadata:
-    """Metadata returned by the TSE CKAN resource API."""
+    """Metadata from CKAN or the immutable contract on discovery HTTP 403 only."""
 
     resource_id: str
     package_id: str
@@ -85,9 +85,23 @@ class TseCandidatesConnector:
             raise
 
     def discover_resource(self) -> TseResourceMetadata:
-        """Resolve the current resource URL through the official CKAN API."""
+        """Prefer CKAN; use a pinned fallback only for resource_show HTTP 403.
 
-        response = self._request_resource_show()
+        All other discovery failures propagate. Artifact validation is unchanged.
+        """
+
+        try:
+            response = self._request_resource_show()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 403 or self.contract.fallback_download_url is None:
+                raise
+            return TseResourceMetadata(
+                resource_id=self.contract.resource_id,
+                package_id=self.contract.package_id,
+                name=self.contract.artifact_name,
+                download_url=self.contract.fallback_download_url,
+                mimetype=self.contract.expected_mimetype,
+            )
 
         try:
             payload = response.json()
