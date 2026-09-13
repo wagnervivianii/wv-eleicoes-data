@@ -103,8 +103,11 @@ def test_success_repeat_preservation_and_batches(engine, artifact):
         assert {change["change_type"] for change in initial_changes} == {"A"}
         assert all(change["changed_fields"] is None for change in initial_changes)
         assert all(change["detected_at"] is not None for change in initial_changes)
+        # SQLite drops timezone metadata for DateTime; compare the preserved wall-clock
+        # source timestamp here. PostgreSQL integration tests verify timestamptz behavior.
+        expected_snapshot_at = snapshot.source_updated_at.replace(tzinfo=None)
         assert all(
-            change["source_snapshot_at"] == snapshot.source_updated_at
+            change["source_snapshot_at"] == expected_snapshot_at
             for change in initial_changes
         )
         runs = (
@@ -255,8 +258,9 @@ def test_regeneration_and_mixed_diff(engine, artifact, tmp_path):
         assert by_type["D"]["changed_fields"] is None
         assert by_type["M"]["changed_fields"] == ["NM_CANDIDATO"]
         assert all(change["detected_at"] is not None for change in changes)
+        expected_snapshot_at = mixed_snapshot.source_updated_at.replace(tzinfo=None)
         assert all(
-            change["source_snapshot_at"] == mixed_snapshot.source_updated_at
+            change["source_snapshot_at"] == expected_snapshot_at
             for change in changes
         )
         active = (
