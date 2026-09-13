@@ -90,6 +90,23 @@ def test_success_repeat_preservation_and_batches(engine, artifact):
             assert [stored[key] for key in TSE_CANDIDATE_SOURCE_HEADERS] == row
             assert stored["source_file"] == CANDIDATES_2026.canonical_csv_name
             assert stored["ingestion_run_id"] == run_id
+        initial_changes = (
+            connection.execute(
+                sa.select(CandidateChange)
+                .where(CandidateChange.run_id == run_id)
+                .order_by(CandidateChange.id)
+            )
+            .mappings()
+            .all()
+        )
+        assert len(initial_changes) == 5
+        assert {change["change_type"] for change in initial_changes} == {"A"}
+        assert all(change["changed_fields"] is None for change in initial_changes)
+        assert all(change["detected_at"] is not None for change in initial_changes)
+        assert all(
+            change["source_snapshot_at"] == snapshot.source_updated_at
+            for change in initial_changes
+        )
         runs = (
             connection.execute(sa.select(IngestionRun).order_by(IngestionRun.id)).mappings().all()
         )
@@ -213,7 +230,8 @@ def test_regeneration_and_mixed_diff(engine, artifact, tmp_path):
         )
     rows[0][17] = "Substantive change"
     rows[1][15] = "new"
-    mixed, _ = ingest(engine, make_snapshot(tmp_path, rows))
+    mixed_snapshot = make_snapshot(tmp_path, rows)
+    mixed, _ = ingest(engine, mixed_snapshot)
     with engine.connect() as conn:
         run = conn.execute(sa.select(IngestionRun).where(IngestionRun.id == mixed)).mappings().one()
         assert [
@@ -232,6 +250,15 @@ def test_regeneration_and_mixed_diff(engine, artifact, tmp_path):
             .all()
         )
         assert sorted(c["change_type"] for c in changes) == ["A", "D", "M"]
+        by_type = {change["change_type"]: change for change in changes}
+        assert by_type["A"]["changed_fields"] is None
+        assert by_type["D"]["changed_fields"] is None
+        assert by_type["M"]["changed_fields"] == ["NM_CANDIDATO"]
+        assert all(change["detected_at"] is not None for change in changes)
+        assert all(
+            change["source_snapshot_at"] == mixed_snapshot.source_updated_at
+            for change in changes
+        )
         active = (
             conn.execute(sa.select(TseCandidate).where(TseCandidate.valid_to_run_id.is_(None)))
             .mappings()
@@ -333,6 +360,21 @@ def test_hash_preserves_exact_values_and_boundaries():
     first = persistence.content_hash(source)
     source.update(nm_candidato="a", nm_urna_candidato="bc")
     assert persistence.content_hash(source) != first
+
+
+def test_changed_fields_are_exact_ordered_official_headers():
+    previous = dict.fromkeys(TSE_CANDIDATE_SOURCE_HEADERS, "")
+    incoming = dict(previous)
+    incoming["dt_geracao"] = "13/09/2026"
+    incoming["hh_geracao"] = "12:34:56"
+    assert persistence.changed_fields(previous, incoming) == []
+
+    incoming["nr_candidato"] = "10"
+    incoming["nm_urna_candidato"] = "Nova Urna"
+    assert persistence.changed_fields(previous, incoming) == [
+        "NR_CANDIDATO",
+        "NM_URNA_CANDIDATO",
+    ]
 
 
 def test_historical_checksum_replay_restores_snapshot(engine, artifact, tmp_path):
