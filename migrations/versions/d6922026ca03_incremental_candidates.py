@@ -185,18 +185,35 @@ def upgrade() -> None:
             ano_eleicao text NOT NULL, cd_eleicao text NOT NULL, sq_candidato text NOT NULL,
             old_raw_candidate_id bigint REFERENCES raw.tse_candidate(id),
             new_raw_candidate_id bigint REFERENCES raw.tse_candidate(id),
+            source_snapshot_at timestamptz NOT NULL,
+            detected_at timestamptz NOT NULL DEFAULT now(),
+            changed_fields jsonb,
             UNIQUE (run_id, ano_eleicao, cd_eleicao, sq_candidato),
             CONSTRAINT change_shape CHECK (
                 (change_type = 'A' AND old_raw_candidate_id IS NULL
-                 AND new_raw_candidate_id IS NOT NULL) OR
+                 AND new_raw_candidate_id IS NOT NULL
+                 AND changed_fields IS NULL) OR
                 (change_type = 'M' AND old_raw_candidate_id IS NOT NULL
                  AND new_raw_candidate_id IS NOT NULL
-                 AND old_raw_candidate_id <> new_raw_candidate_id) OR
+                 AND old_raw_candidate_id <> new_raw_candidate_id
+                 AND changed_fields IS NOT NULL
+                 AND jsonb_typeof(changed_fields) = 'array'
+                 AND jsonb_array_length(changed_fields) > 0) OR
                 (change_type = 'D' AND old_raw_candidate_id IS NOT NULL
-                 AND new_raw_candidate_id IS NULL))
+                 AND new_raw_candidate_id IS NULL
+                 AND changed_fields IS NULL))
         )
     """)
     op.execute("CREATE INDEX ix_audit_candidate_change_run_id ON audit.candidate_change (run_id)")
+    op.execute(
+        "CREATE INDEX ix_audit_candidate_change_election_run "
+        "ON audit.candidate_change (ano_eleicao, run_id)"
+    )
+    op.execute(
+        "CREATE INDEX ix_audit_candidate_change_candidacy_history "
+        "ON audit.candidate_change "
+        "(ano_eleicao, cd_eleicao, sq_candidato, detected_at, id)"
+    )
     op.execute("REVOKE ALL ON audit.candidate_change FROM PUBLIC, wv_eleicoes_api")
     op.execute("GRANT SELECT, INSERT ON audit.candidate_change TO wv_eleicoes_ingestion")
     op.execute(
