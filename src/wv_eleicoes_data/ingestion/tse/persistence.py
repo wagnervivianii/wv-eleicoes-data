@@ -89,9 +89,10 @@ def changed_fields(
 
 def _source_values(connection: Connection, raw_candidate_id: int) -> Mapping[str, object]:
     columns = [getattr(TseCandidate, name).label(name) for name in TSE_CANDIDATE_SOURCE_HEADERS]
-    return connection.execute(
+    row = connection.execute(
         select(*columns).where(TseCandidate.id == raw_candidate_id)
     ).mappings().one()
+    return dict(row)
 
 
 def insert_rows(
