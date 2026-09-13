@@ -7,7 +7,7 @@ from zipfile import ZipFile
 import pytest
 import sqlalchemy as sa
 
-from wv_eleicoes_data.db.models import IngestionRun, TseCandidate
+from wv_eleicoes_data.db.models import CandidateChange, IngestionRun, TseCandidate
 from wv_eleicoes_data.db.models.tse_candidate import TSE_CANDIDATE_SOURCE_HEADERS
 from wv_eleicoes_data.ingestion.tse import persistence, pipeline
 from wv_eleicoes_data.ingestion.tse.connector import (
@@ -22,7 +22,7 @@ def engine():
     engine = sa.create_engine("sqlite://")
     # SQLite's INTEGER PK is the local equivalent of PostgreSQL BIGSERIAL.
     metadata = sa.MetaData()
-    for model in (IngestionRun, TseCandidate):
+    for model in (IngestionRun, TseCandidate, CandidateChange):
         table = model.__table__.to_metadata(metadata)
         table.c.id.type = sa.Integer()
     with engine.begin() as connection:
@@ -45,7 +45,10 @@ def artifact(tmp_path):
     stream = StringIO(newline="")
     writer = csv.writer(stream, delimiter=";", lineterminator="\r\n")
     writer.writerow(CANDIDATES_2026.expected_headers)
-    writer.writerows([row] * 5)
+    row[2], row[6] = "2026", "123"
+    for i in range(5):
+        row[15] = str(i)
+        writer.writerow(row)
     path = tmp_path / "source.zip"
     with ZipFile(path, "w") as archive:
         archive.writestr(CANDIDATES_2026.canonical_csv_name, stream.getvalue().encode("latin-1"))
@@ -61,7 +64,11 @@ def test_success_repeat_preservation_and_batches(engine, artifact):
 
     def track(conn, cursor, statement, parameters, context, executemany):
         if statement.startswith("INSERT INTO raw.tse_candidate"):
-            batches.append(len(parameters) if executemany else 1)
+            batches.append(
+                len(context.compiled_parameters)
+                if context.execute_style.name != "INSERTMANYVALUES"
+                else 1
+            )
 
     sa.event.listen(engine, "before_cursor_execute", track)
     with (
@@ -72,12 +79,14 @@ def test_success_repeat_preservation_and_batches(engine, artifact):
         repeat_id, repeat_status = pipeline.run_pipeline(engine, batch_size=2)
     assert (status, repeat_status) == ("success", "skipped")
     assert lock.call_count == 2
-    assert batches == [2, 2, 1]
+    assert sum(batches) == 5
+    assert max(batches) <= 2
     with engine.connect() as connection:
         rows = connection.execute(sa.select(TseCandidate)).mappings().all()
         assert len(rows) == 5
         assert [r["source_row_number"] for r in rows] == [2, 4, 6, 8, 10]
-        for stored in rows:
+        for i, stored in enumerate(rows):
+            row[15] = str(i)
             assert [stored[key] for key in TSE_CANDIDATE_SOURCE_HEADERS] == row
             assert stored["source_file"] == CANDIDATES_2026.canonical_csv_name
             assert stored["ingestion_run_id"] == run_id
@@ -151,3 +160,176 @@ def test_postgresql_lock_is_stable_and_parameterized():
     assert first.args[1] == connection.execute.call_args.args[1]
     assert str(first.args[0]) == "SELECT pg_advisory_xact_lock(:key)"
     assert -(2**63) <= first.args[1]["key"] < 2**63
+
+
+def make_snapshot(tmp_path, rows):
+    stream = StringIO(newline="")
+    writer = csv.writer(stream, delimiter=";", lineterminator="\r\n")
+    writer.writerow(CANDIDATES_2026.expected_headers)
+    writer.writerows(rows)
+    path = tmp_path / "diff.zip"
+    with ZipFile(path, "w") as archive:
+        archive.writestr(CANDIDATES_2026.canonical_csv_name, stream.getvalue().encode("latin-1"))
+    return TseCandidatesConnector().inspect_artifact(
+        path,
+        TseResourceMetadata("id", "package", "name", "https://example.test", "application/zip"),
+    )
+
+
+def ingest(engine, snapshot):
+    with (
+        patch.object(TseCandidatesConnector, "fetch", return_value=snapshot),
+        patch.object(persistence, "lock_artifact"),
+    ):
+        return pipeline.run_pipeline(engine, batch_size=2)
+
+
+def test_regeneration_and_mixed_diff(engine, artifact, tmp_path):
+    snapshot, template = artifact
+    first, _ = ingest(engine, snapshot)
+    rows = []
+    for i in range(5):
+        row = template.copy()
+        row[15] = str(i)
+        row[1] = "11:12:13"
+        rows.append(row)
+    regenerated, status = ingest(engine, make_snapshot(tmp_path, rows))
+    assert status == "success"
+    with engine.connect() as conn:
+        run = (
+            conn.execute(sa.select(IngestionRun).where(IngestionRun.id == regenerated))
+            .mappings()
+            .one()
+        )
+        assert run["rows_unchanged"] == 5
+        assert run["rows_inserted"] == run["rows_updated"] == 0
+        assert (
+            conn.scalar(
+                sa.select(sa.func.count())
+                .select_from(CandidateChange)
+                .where(CandidateChange.run_id == regenerated)
+            )
+            == 0
+        )
+    rows[0][17] = "Substantive change"
+    rows[1][15] = "new"
+    mixed, _ = ingest(engine, make_snapshot(tmp_path, rows))
+    with engine.connect() as conn:
+        run = conn.execute(sa.select(IngestionRun).where(IngestionRun.id == mixed)).mappings().one()
+        assert [
+            run[name]
+            for name in (
+                "rows_added",
+                "rows_updated",
+                "rows_removed",
+                "rows_unchanged",
+                "rows_inserted",
+            )
+        ] == [1, 1, 1, 3, 2]
+        changes = (
+            conn.execute(sa.select(CandidateChange).where(CandidateChange.run_id == mixed))
+            .mappings()
+            .all()
+        )
+        assert sorted(c["change_type"] for c in changes) == ["A", "D", "M"]
+        active = (
+            conn.execute(sa.select(TseCandidate).where(TseCandidate.valid_to_run_id.is_(None)))
+            .mappings()
+            .all()
+        )
+        assert {r["sq_candidato"] for r in active} == {"0", "new", "2", "3", "4"}
+        assert sum(r["ingestion_run_id"] == first for r in active) == 3
+        assert conn.scalar(sa.select(sa.func.count()).select_from(TseCandidate)) == 7
+        for change in changes:
+            if change["old_raw_candidate_id"]:
+                assert (
+                    conn.scalar(
+                        sa.select(TseCandidate.valid_to_run_id).where(
+                            TseCandidate.id == change["old_raw_candidate_id"]
+                        )
+                    )
+                    == mixed
+                )
+
+
+@pytest.mark.parametrize(
+    "invalid", ["duplicate", "", " #NULO ", "#NE", "-1", "-3", "-4", "NÃO DIVULGÁVEL"]
+)
+def test_invalid_keys_rollback_diff(engine, artifact, tmp_path, invalid):
+    snapshot, template = artifact
+    ingest(engine, snapshot)
+    rows = []
+    for i in range(3):
+        row = template.copy()
+        row[15] = str(i)
+        row[17] = "changed"
+        rows.append(row)
+    rows[-1][15] = "0" if invalid == "duplicate" else invalid
+    with pytest.raises(persistence.TseIngestionError):
+        ingest(engine, make_snapshot(tmp_path, rows))
+    with engine.connect() as conn:
+        assert conn.scalar(sa.select(sa.func.count()).select_from(TseCandidate)) == 5
+        assert (
+            conn.scalar(
+                sa.select(sa.func.count())
+                .select_from(TseCandidate)
+                .where(TseCandidate.valid_to_run_id.is_not(None))
+            )
+            == 0
+        )
+        assert conn.scalar(sa.select(sa.func.count()).select_from(CandidateChange)) == 5
+
+
+def test_dataset_lock_serializes_different_checksums():
+    from unittest.mock import MagicMock
+
+    connection = MagicMock()
+    persistence.lock_artifact(connection, CANDIDATES_2026, "abc")
+    first = connection.execute.call_args.args[1]
+    persistence.lock_artifact(connection, CANDIDATES_2026, "def")
+    assert first == connection.execute.call_args.args[1]
+
+
+def test_hash_bootstrap_and_active_uniqueness(engine, artifact, tmp_path):
+    snapshot, template = artifact
+    ingest(engine, snapshot)
+    with engine.begin() as conn:
+        conn.execute(sa.update(TseCandidate).values(content_hash=None))
+    rows = []
+    for i in range(5):
+        row = template.copy()
+        row[15] = str(i)
+        row[0] = "13/09/2026"
+        rows.append(row)
+    run_id, _ = ingest(engine, make_snapshot(tmp_path, rows))
+    with engine.begin() as conn:
+        assert (
+            conn.scalar(sa.select(IngestionRun.rows_unchanged).where(IngestionRun.id == run_id))
+            == 5
+        )
+        assert (
+            conn.scalar(
+                sa.select(sa.func.count())
+                .select_from(TseCandidate)
+                .where(TseCandidate.content_hash.is_(None))
+            )
+            == 0
+        )
+        row = dict(conn.execute(sa.select(TseCandidate)).mappings().first())
+        row.pop("id")
+        row["source_row_number"] = 999
+        with pytest.raises(sa.exc.IntegrityError):
+            conn.execute(sa.insert(TseCandidate).values(**row))
+
+
+def test_hash_preserves_exact_values_and_boundaries():
+    source = dict.fromkeys(TSE_CANDIDATE_SOURCE_HEADERS, "")
+    digest = persistence.content_hash(source)
+    source.update(dt_geracao="different", hh_geracao="different")
+    assert persistence.content_hash(source) == digest
+    source["nm_candidato"] = " "
+    assert persistence.content_hash(source) != digest
+    source.update(nm_candidato="ab", nm_urna_candidato="c")
+    first = persistence.content_hash(source)
+    source.update(nm_candidato="a", nm_urna_candidato="bc")
+    assert persistence.content_hash(source) != first
