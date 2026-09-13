@@ -5,6 +5,9 @@ from wv_eleicoes_data.ingestion.tse.contracts import (
 
 
 def test_candidates_2026_contract_matches_observed_official_resource() -> None:
+    assert CANDIDATES_2026.fallback_download_url == (
+        "https://cdn.tse.jus.br/estatistica/sead/odsele/consulta_cand/consulta_cand_2026.zip"
+    )
     assert CANDIDATES_2026.source == "TSE"
     assert CANDIDATES_2026.dataset == "candidatos"
     assert CANDIDATES_2026.election_year == 2026

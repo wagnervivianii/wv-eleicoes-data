@@ -1,6 +1,7 @@
 import csv
 import hashlib
 import io
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -12,6 +13,7 @@ from wv_eleicoes_data.ingestion.tse.connector import (
     TseCandidatesConnector,
     TseIngestionError,
     TseResourceMetadata,
+    TseRetryableHttpError,
 )
 from wv_eleicoes_data.ingestion.tse.contracts import CANDIDATES_2026
 
@@ -143,3 +145,122 @@ def test_inspect_artifact_rejects_non_zip(tmp_path: Path) -> None:
 
     with pytest.raises(TseIngestionError, match="not a valid ZIP"):
         TseCandidatesConnector().inspect_artifact(artifact_path, _resource())
+
+
+@pytest.mark.parametrize("invalid_artifact", [False, True])
+def test_fetch_uses_pinned_fallback_only_on_discovery_403(
+    tmp_path: Path, invalid_artifact: bool
+) -> None:
+    content = (
+        _build_zip([_candidate_row()], header=("INVALID",))
+        if invalid_artifact
+        else _build_zip([_candidate_row()])
+    )
+    urls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        urls.append(str(request.url))
+        if request.url.path.endswith("/resource_show"):
+            return httpx.Response(403, json={"result": {"name": "untrusted"}})
+        assert str(request.url) == CANDIDATES_2026.fallback_download_url
+        return httpx.Response(200, content=content)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        connector = TseCandidatesConnector(client=client)
+        if invalid_artifact:
+            with pytest.raises(TseIngestionError, match="header differs"):
+                connector.fetch(tmp_path)
+            assert not (tmp_path / CANDIDATES_2026.artifact_name).exists()
+        else:
+            artifact = connector.fetch(tmp_path)
+            assert artifact.resource == TseResourceMetadata(
+                resource_id=CANDIDATES_2026.resource_id,
+                package_id=CANDIDATES_2026.package_id,
+                name=CANDIDATES_2026.artifact_name,
+                download_url=str(CANDIDATES_2026.fallback_download_url),
+                mimetype=CANDIDATES_2026.expected_mimetype,
+            )
+            assert artifact.row_count == 1
+            assert artifact.sha256 == hashlib.sha256(content).hexdigest()
+            assert artifact.source_updated_at.isoformat() == "2026-09-11T12:30:43-03:00"
+    assert len(urls) == 2
+
+
+@pytest.mark.parametrize("status,has_fallback", [(403, False), (401, True), (404, True)])
+def test_discovery_http_errors_fail_closed(status: int, has_fallback: bool) -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(status)
+
+    contract = (
+        CANDIDATES_2026 if has_fallback else replace(CANDIDATES_2026, fallback_download_url=None)
+    )
+    with (
+        httpx.Client(transport=httpx.MockTransport(handler)) as client,
+        pytest.raises(httpx.HTTPStatusError) as error,
+    ):
+        TseCandidatesConnector(contract, client=client).discover_resource()
+    assert error.value.response.status_code == status
+    assert len(requests) == 1
+
+
+@pytest.mark.parametrize(
+    "defect", ["json", "success", "result", "id", "package_id", "mimetype", "url"]
+)
+def test_invalid_ckan_success_never_falls_back(defect: str, tmp_path: Path) -> None:
+    requests: list[httpx.Request] = []
+    result = {
+        "id": CANDIDATES_2026.resource_id,
+        "package_id": CANDIDATES_2026.package_id,
+        "mimetype": CANDIDATES_2026.expected_mimetype,
+        "name": "Candidatos",
+        "url": "https://example.invalid/candidates.zip",
+    }
+    payload: dict[str, object] = {"success": True, "result": result}
+    if defect == "success":
+        payload["success"] = False
+    elif defect == "result":
+        del payload["result"]
+    elif defect in result:
+        result[defect] = "" if defect == "url" else "mismatch"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if defect == "json":
+            return httpx.Response(200, content=b"not JSON")
+        return httpx.Response(200, json=payload)
+
+    with (
+        httpx.Client(transport=httpx.MockTransport(handler)) as client,
+        pytest.raises(TseIngestionError),
+    ):
+        TseCandidatesConnector(client=client).fetch(tmp_path)
+    assert len(requests) == 1
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("failure", [429, 503, "transport"])
+def test_discovery_retries_exhaust_without_fallback(
+    failure: int | str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tenacity import wait_none
+
+    monkeypatch.setattr(TseCandidatesConnector._request_resource_show.retry, "wait", wait_none())
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.url.path.endswith("/resource_show")
+        if isinstance(failure, str):
+            raise httpx.ConnectError("unavailable", request=request)
+        return httpx.Response(failure)
+
+    expected = httpx.ConnectError if failure == "transport" else TseRetryableHttpError
+    with (
+        httpx.Client(transport=httpx.MockTransport(handler)) as client,
+        pytest.raises(expected),
+    ):
+        TseCandidatesConnector(client=client).discover_resource()
+    assert len(requests) == 4

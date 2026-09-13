@@ -72,6 +72,7 @@ class TseResourceContract:
     source_timezone: str
     expected_mimetype: str
     expected_headers: tuple[str, ...]
+    fallback_download_url: str | None = None
 
     @property
     def resource_show_url(self) -> str:
@@ -95,4 +96,7 @@ CANDIDATES_2026 = TseResourceContract(
     source_timezone="America/Sao_Paulo",
     expected_mimetype="application/zip",
     expected_headers=TSE_CANDIDATES_2026_HEADERS,
+    fallback_download_url=(
+        "https://cdn.tse.jus.br/estatistica/sead/odsele/consulta_cand/consulta_cand_2026.zip"
+    ),
 )
