@@ -82,6 +82,33 @@ def test_postgresql_backfill_and_current_projection(request):
                 module = migration(revision)
                 with patch.object(module, "op", operations):
                     module.upgrade()
+            def has_privilege(role, relation, privilege):
+                return conn.scalar(sa.text(
+                    "SELECT has_table_privilege(:role, :relation, :privilege)"
+                ), {"role": role, "relation": relation, "privilege": privilege})
+
+            ingestion = "wv_eleicoes_ingestion"
+            for relation in ("raw.tse_candidate", "audit.candidate_change"):
+                for privilege in ("SELECT", "INSERT"):
+                    assert has_privilege(ingestion, relation, privilege)
+            for privilege in ("UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"):
+                assert not has_privilege(ingestion, "raw.tse_candidate", privilege)
+            for column in sa.inspect(conn).get_columns("tse_candidate", schema="raw"):
+                assert conn.scalar(sa.text(
+                    "SELECT has_column_privilege(:role, 'raw.tse_candidate', :column, 'UPDATE')"
+                ), {"role": ingestion, "column": column["name"]}) == (
+                    column["name"] in {"valid_to_run_id", "content_hash"}
+                )
+            for relation in ("analytics.candidate_2026", "core.candidate", "analytics.candidate"):
+                assert has_privilege("wv_eleicoes_api", relation, "SELECT")
+                for privilege in (
+                    "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER",
+                ):
+                    assert not has_privilege("wv_eleicoes_api", relation, privilege)
+            for schema in ("raw", "audit", "staging"):
+                assert not conn.scalar(sa.text(
+                    "SELECT has_schema_privilege('wv_eleicoes_api', :schema, 'USAGE')"
+                ), {"schema": schema})
             assert conn.scalar(sa.text("SELECT count(*) FROM raw.tse_candidate")) == 3
             assert conn.execute(
                 sa.text(

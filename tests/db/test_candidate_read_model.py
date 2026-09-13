@@ -110,15 +110,23 @@ def test_postgresql_snapshot_lifecycle(request: pytest.FixtureRequest) -> None:
             assert {r["ingestion_run_id"] for r in rows} == {3}
             assert [r["nr_candidato"] for r in rows] == sentinels
             assert rows == refresh()
-            conn.execute(sa.text("SET LOCAL ROLE wv_eleicoes_api"))
-            assert list(conn.execute(query).mappings()) == rows
-            assert not conn.scalar(sa.text(
-                "SELECT has_schema_privilege(current_user, 'raw', 'USAGE')"
+            # The migration owner need not be a member of the API role. PostgreSQL
+            # privilege predicates include inherited and PUBLIC grants for that role.
+            assert conn.scalar(sa.text(
+                "SELECT has_schema_privilege('wv_eleicoes_api', 'analytics', 'USAGE')"
+            ))
+            assert conn.scalar(sa.text(
+                "SELECT has_table_privilege("
+                "'wv_eleicoes_api', 'analytics.candidate_2026', 'SELECT')"
             ))
             assert not conn.scalar(sa.text(
-                "SELECT has_table_privilege(current_user, 'analytics.candidate_2026', 'INSERT')"
+                "SELECT has_schema_privilege('wv_eleicoes_api', 'raw', 'USAGE')"
             ))
-            conn.execute(sa.text("RESET ROLE"))
+            for privilege in ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'):
+                assert not conn.scalar(sa.text(
+                    "SELECT has_table_privilege("
+                    "'wv_eleicoes_api', 'analytics.candidate_2026', :privilege)"
+                ), {"privilege": privilege})
             conn.execute(sa.update(TseCandidate).where(
                 TseCandidate.ingestion_run_id == 3,
                 TseCandidate.nr_candidato == "#NULO",

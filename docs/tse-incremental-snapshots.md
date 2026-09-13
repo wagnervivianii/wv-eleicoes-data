@@ -11,9 +11,14 @@ Candidate `content_hash` is SHA-256 of the UTF-8 encoding of a compact JSON arra
 strings in official column order, excluding only DT_GERACAO and HH_GERACAO.
 JSON framing preserves field boundaries, whitespace, embedded newlines and sentinels.
 The ZIP SHA-256 remains the snapshot fingerprint. Every scheduled run downloads
-and validates the full archive before checking for a previous successful checksum.
-Any previously successful checksum is skipped, including a return to an older
-artifact: this intentionally follows the artifact deduplication contract.
+and validates the full archive before comparing with the latest successfully applied
+snapshot for the source/dataset, ordered by completion time and run ID. Only that
+checksum is skipped; A -> B -> A reconciles back to A. Failed and skipped runs do
+not move the applied snapshot pointer.
+
+Active comparison and legacy hash bootstrap are scoped to the exact contract
+election year. Source filenames are not an additional filter, preserving existing
+history under the election/candidacy key even if a filename changes.
 
 A dataset-wide transaction advisory lock serializes all checksums. Under READ
 COMMITTED, the state lookup after acquiring the lock observes the preceding commit.

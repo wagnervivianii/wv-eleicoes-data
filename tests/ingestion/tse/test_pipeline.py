@@ -333,3 +333,76 @@ def test_hash_preserves_exact_values_and_boundaries():
     first = persistence.content_hash(source)
     source.update(nm_candidato="a", nm_urna_candidato="bc")
     assert persistence.content_hash(source) != first
+
+
+def test_historical_checksum_replay_restores_snapshot(engine, artifact, tmp_path):
+    snapshot_a, template = artifact
+    ingest(engine, snapshot_a)
+    rows = [template.copy() for _ in range(5)]
+    for i, row in enumerate(rows):
+        row[15] = str(i)
+    rows[0][17] = "Changed name"
+    rows[1][15] = "new"
+    ingest(engine, make_snapshot(tmp_path, rows))
+    replay, status = ingest(engine, snapshot_a)
+    assert status == "success"
+    with engine.connect() as conn:
+        active = (
+            conn.execute(sa.select(TseCandidate).where(TseCandidate.valid_to_run_id.is_(None)))
+            .mappings()
+            .all()
+        )
+        assert {row["sq_candidato"] for row in active} == {str(i) for i in range(5)}
+        for stored in active:
+            expected = template.copy()
+            expected[15] = stored["sq_candidato"]
+            assert [stored[key] for key in TSE_CANDIDATE_SOURCE_HEADERS] == expected
+        changes = (
+            conn.execute(
+                sa.select(CandidateChange.change_type).where(CandidateChange.run_id == replay)
+            )
+            .scalars()
+            .all()
+        )
+        assert sorted(changes) == ["A", "D", "M"]
+    assert ingest(engine, snapshot_a)[1] == "skipped"
+
+
+def test_snapshot_preserves_other_election(engine, artifact):
+    snapshot, template = artifact
+    legacy_run = persistence.start_run(engine, CANDIDATES_2026)
+    payload = dict(zip(TSE_CANDIDATE_SOURCE_HEADERS, template, strict=True))
+    payload["ano_eleicao"] = "2022"
+    with engine.begin() as conn:
+        other_id = conn.scalar(
+            sa.insert(TseCandidate)
+            .values(
+                **payload,
+                ingestion_run_id=legacy_run,
+                valid_from_run_id=legacy_run,
+                source_file="consulta_cand_2022_BRASIL.csv",
+                source_row_number=2,
+            )
+            .returning(TseCandidate.id)
+        )
+    run_id, status = ingest(engine, snapshot)
+    assert status == "success"
+    with engine.connect() as conn:
+        other = (
+            conn.execute(sa.select(TseCandidate).where(TseCandidate.id == other_id))
+            .mappings()
+            .one()
+        )
+        assert other["valid_to_run_id"] is None
+        assert other["content_hash"] is None
+        assert (
+            conn.scalar(sa.select(IngestionRun.rows_removed).where(IngestionRun.id == run_id)) == 0
+        )
+        assert (
+            conn.scalar(
+                sa.select(sa.func.count())
+                .select_from(CandidateChange)
+                .where(CandidateChange.ano_eleicao == "2022")
+            )
+            == 0
+        )

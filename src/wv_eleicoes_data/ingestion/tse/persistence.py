@@ -85,7 +85,10 @@ def insert_rows(
         raise ValueError("batch_size must be between 1 and 1000")
     current = {}
     for stored in connection.execute(
-        select(TseCandidate).where(TseCandidate.valid_to_run_id.is_(None))
+        select(TseCandidate).where(
+            TseCandidate.valid_to_run_id.is_(None),
+            TseCandidate.ano_eleicao == str(contract.election_year),
+        )
     ).mappings():
         key = tuple(stored[name] for name in KEY_FIELDS)
         current[key] = (
@@ -208,19 +211,21 @@ def load_artifact(
     with engine.begin() as connection:
         lock_artifact(connection, contract, artifact.sha256)
         previous = connection.scalar(
-            select(IngestionRun.id)
+            select(IngestionRun.checksum)
             .where(
                 IngestionRun.source == contract.source,
                 IngestionRun.dataset == contract.dataset,
-                IngestionRun.checksum == artifact.sha256,
                 IngestionRun.status == "success",
             )
+            .order_by(IngestionRun.finished_at.desc().nulls_last(), IngestionRun.id.desc())
             .limit(1)
         )
-        status = "skipped" if previous is not None else "success"
+        # Run IDs reflect start order; completion under the dataset lock is apply order.
+        skip = previous == artifact.sha256
+        status = "skipped" if skip else "success"
         added, modified, removed, unchanged = (
             (0, 0, 0, 0)
-            if previous is not None
+            if skip
             else insert_rows(
                 connection,
                 artifact,
