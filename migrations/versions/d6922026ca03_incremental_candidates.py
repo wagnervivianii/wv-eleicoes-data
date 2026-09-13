@@ -197,8 +197,11 @@ def upgrade() -> None:
                  AND new_raw_candidate_id IS NOT NULL
                  AND old_raw_candidate_id <> new_raw_candidate_id
                  AND changed_fields IS NOT NULL
-                 AND jsonb_typeof(changed_fields) = 'array'
-                 AND jsonb_array_length(changed_fields) > 0) OR
+                 AND CASE
+                     WHEN jsonb_typeof(changed_fields) = 'array'
+                     THEN jsonb_array_length(changed_fields) > 0
+                     ELSE FALSE
+                 END) OR
                 (change_type = 'D' AND old_raw_candidate_id IS NOT NULL
                  AND new_raw_candidate_id IS NULL
                  AND changed_fields IS NULL))
