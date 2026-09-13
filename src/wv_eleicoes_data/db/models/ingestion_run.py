@@ -67,6 +67,10 @@ class IngestionRun(Base):
         nullable=True,
     )
 
+    rows_added: Mapped[int | None] = mapped_column(Integer)
+    rows_removed: Mapped[int | None] = mapped_column(Integer)
+    rows_unchanged: Mapped[int | None] = mapped_column(Integer)
+
     rows_rejected: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,

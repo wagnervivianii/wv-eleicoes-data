@@ -24,7 +24,11 @@ def test_metadata_and_complete_source_mapping() -> None:
     assert TABLE.schema == "raw"
     assert TABLE.name == "tse_candidate"
     assert Base.metadata.tables["raw.tse_candidate"] is TABLE
-    source_names = set(TABLE.columns.keys()) - PROVENANCE
+    source_names = (
+        set(TABLE.columns.keys())
+        - PROVENANCE
+        - {"valid_from_run_id", "valid_to_run_id", "content_hash"}
+    )
     assert len(source_names) == len(TSE_CANDIDATES_2026_HEADERS) == 50
     assert len(set(TSE_CANDIDATES_2026_HEADERS)) == 50
     assert source_names == set(TSE_CANDIDATE_SOURCE_HEADERS)
@@ -46,7 +50,7 @@ def test_provenance_and_identity() -> None:
     assert fk.column is Base.metadata.tables["audit.ingestion_run"].c.id
     (unique,) = [c for c in TABLE.constraints if isinstance(c, sa.UniqueConstraint)]
     assert list(unique.columns.keys()) == ["ingestion_run_id", "source_file", "source_row_number"]
-    assert not TABLE.indexes  # The unique index already starts with ingestion_run_id.
+    assert {index.name for index in TABLE.indexes} == {"uq_tse_candidate_active"}
     assert isinstance(TABLE.c.ingested_at.type, sa.DateTime)
     assert TABLE.c.ingested_at.type.timezone
     assert TABLE.c.ingested_at.server_default is not None
@@ -64,6 +68,8 @@ def test_lossless_storage_and_provenance_uniqueness() -> None:
             payload,
             id=1,
             ingestion_run_id=1,
+            valid_from_run_id=1,
+            valid_to_run_id=2,
             source_file="consulta_cand_2026_BRASIL.csv",
             source_row_number=1,
             ingested_at=datetime.now(UTC),
