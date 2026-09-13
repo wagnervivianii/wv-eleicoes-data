@@ -60,5 +60,5 @@ class CandidateChange(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     changed_fields: Mapped[list[str] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql")
+        JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql")
     )
