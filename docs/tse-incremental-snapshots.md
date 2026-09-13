@@ -54,3 +54,36 @@ or a separately reviewed forward migration.
 
 Comparison memory is proportional to active key/hash pairs plus incoming keys;
 source payload and change INSERT batches are bounded to at most 1000 rows.
+
+
+## Temporal change ledger
+
+`audit.candidate_change` is the canonical internal A/M/D ledger for candidate
+changes across election years. Each row identifies the ingestion run and the exact
+candidacy key `(ANO_ELEICAO, CD_ELEICAO, SQ_CANDIDATO)`, together with links to
+the old and/or new immutable RAW versions.
+
+Two timestamps have deliberately different meanings. `source_snapshot_at` copies
+the TSE snapshot generation timestamp observed in the downloaded artifact. It means
+that the change was present in that TSE snapshot; it does not claim the exact
+business-event time when TSE changed the candidacy. `detected_at` is populated by
+the database when WV Eleições persists the A/M/D event and therefore records when
+our platform detected the change.
+
+For M events, `changed_fields` is an ordered JSON array containing the exact
+official TSE header names whose decoded source strings changed. Comparison is exact,
+without trimming or normalization, and preserves official source-column order.
+`DT_GERACAO` and `HH_GERACAO` are excluded because they are snapshot-wide
+publication metadata already represented by `source_snapshot_at`. A and D events
+store `changed_fields = NULL`: the logical candidacy appeared or disappeared
+rather than an individual field mutation.
+
+Old and new field values are intentionally not copied into the audit table. Internal
+forensic analysis can join `old_raw_candidate_id` and `new_raw_candidate_id`
+back to the immutable RAW versions when authorized, avoiding a second copy of CPF,
+voter registration, email and other sensitive source fields.
+
+Indexes support run-level, election-level and candidacy-history inspection. The
+public API role has no access to the audit schema. The current public serving layer
+remains explicitly limited to `analytics.candidate_2026`, so loading historical
+elections later cannot mix another election into the 2026 public page.
