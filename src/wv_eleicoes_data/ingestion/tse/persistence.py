@@ -60,6 +60,7 @@ def lock_artifact(connection: Connection, contract: TseResourceContract, checksu
 
 KEY_FIELDS = ("ano_eleicao", "cd_eleicao", "sq_candidato")
 SENTINELS = {"", "#NULO", "#NE", "NÃO DIVULGÁVEL", "-1", "-3", "-4"}
+IGNORED_CHANGE_FIELDS = {"dt_geracao", "hh_geracao"}
 
 
 def content_hash(source: Mapping[str, object]) -> str:
@@ -67,11 +68,30 @@ def content_hash(source: Mapping[str, object]) -> str:
     values = [
         source[name]
         for name in TSE_CANDIDATE_SOURCE_HEADERS
-        if name not in {"dt_geracao", "hh_geracao"}
+        if name not in IGNORED_CHANGE_FIELDS
     ]
     return hashlib.sha256(
         json.dumps(values, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
+
+
+def changed_fields(
+    previous: Mapping[str, object],
+    incoming: Mapping[str, object],
+) -> list[str]:
+    """Return exact official headers that changed, in official source-column order."""
+    return [
+        official_header
+        for name, official_header in TSE_CANDIDATE_SOURCE_HEADERS.items()
+        if name not in IGNORED_CHANGE_FIELDS and previous[name] != incoming[name]
+    ]
+
+
+def _source_values(connection: Connection, raw_candidate_id: int) -> Mapping[str, object]:
+    columns = [getattr(TseCandidate, name).label(name) for name in TSE_CANDIDATE_SOURCE_HEADERS]
+    return connection.execute(
+        select(*columns).where(TseCandidate.id == raw_candidate_id)
+    ).mappings().one()
 
 
 def insert_rows(
@@ -153,7 +173,12 @@ def insert_rows(
             if old is not None and old[1] == digest:
                 unchanged += 1
                 continue
+
+            fields: list[str] | None = None
             if old is not None:
+                fields = changed_fields(_source_values(connection, old[0]), source)
+                if not fields:
+                    raise TseIngestionError("Candidate hash changed without source-field delta")
                 modified += 1
                 connection.execute(
                     update(TseCandidate)
@@ -162,6 +187,7 @@ def insert_rows(
                 )
             else:
                 added += 1
+
             batch.append(
                 dict(
                     source,
@@ -178,6 +204,8 @@ def insert_rows(
                     run_id=run_id,
                     change_type="M" if old else "A",
                     old_raw_candidate_id=old[0] if old else None,
+                    source_snapshot_at=artifact.source_updated_at,
+                    changed_fields=fields,
                 )
             )
             if len(batch) == batch_size:
@@ -196,6 +224,8 @@ def insert_rows(
                 change_type="D",
                 old_raw_candidate_id=old[0],
                 new_raw_candidate_id=None,
+                source_snapshot_at=artifact.source_updated_at,
+                changed_fields=None,
             )
         )
     return added, modified, len(current), unchanged
