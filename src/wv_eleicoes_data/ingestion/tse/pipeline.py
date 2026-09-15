@@ -10,6 +10,10 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.engine import make_url
 
 from wv_eleicoes_data.ingestion.tse.connector import TseCandidatesConnector
+from wv_eleicoes_data.ingestion.tse.contracts import (
+    SUPPORTED_CANDIDATE_YEARS,
+    candidates_contract_for_year,
+)
 from wv_eleicoes_data.ingestion.tse.persistence import fail_run, load_artifact, start_run
 
 
@@ -48,7 +52,14 @@ def run_pipeline(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Ingest official TSE 2026 candidates into RAW.")
+    parser = argparse.ArgumentParser(description="Ingest official TSE candidates into RAW.")
+    parser.add_argument(
+        "--year",
+        type=int,
+        choices=SUPPORTED_CANDIDATE_YEARS,
+        default=2026,
+        help="Election year to ingest. Defaults to 2026 for backward-compatible operations.",
+    )
     parser.add_argument(
         "--batch-size", type=int, choices=range(1, 1001), default=1000, metavar="1..1000"
     )
@@ -60,7 +71,8 @@ def main(argv: list[str] | None = None) -> int:
         print("Startup failed: a valid WV_ELEICOES_INGESTION_DATABASE_URL is required.")
         return 2
     try:
-        run_id, status = run_pipeline(engine, batch_size=args.batch_size)
+        connector = TseCandidatesConnector(candidates_contract_for_year(args.year))
+        run_id, status = run_pipeline(engine, connector=connector, batch_size=args.batch_size)
         print(f"ingestion_run_id={run_id} status={status}")
         return 0
     except BaseException:

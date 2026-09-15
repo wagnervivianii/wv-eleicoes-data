@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 TSE_CANDIDATES_2026_HEADERS = (
     "DT_GERACAO",
@@ -53,6 +53,10 @@ TSE_CANDIDATES_2026_HEADERS = (
     "DS_SIT_TOT_TURNO",
 )
 
+# The official 2022 probe on 2026-09-15 proved exact positional equality with 2026.
+# Keep a semantic alias so future years may diverge without rewriting call sites.
+TSE_CANDIDATES_2022_HEADERS = TSE_CANDIDATES_2026_HEADERS
+
 TSE_CANDIDATE_DISCOVERY_REQUIRED_HEADERS = (
     "DT_GERACAO",
     "HH_GERACAO",
@@ -94,6 +98,12 @@ class TseResourceContract:
 
         return self.expected_headers is None
 
+    @property
+    def scope_key(self) -> str:
+        """Return the audit/idempotency scope for this annual candidates snapshot."""
+
+        return f"election-year:{self.election_year}"
+
 
 CANDIDATES_2026 = TseResourceContract(
     source="TSE",
@@ -115,7 +125,7 @@ CANDIDATES_2026 = TseResourceContract(
     ),
 )
 
-CANDIDATES_2022_DISCOVERY = TseResourceContract(
+CANDIDATES_2022 = TseResourceContract(
     source="TSE",
     dataset="candidatos",
     election_year=2022,
@@ -129,8 +139,26 @@ CANDIDATES_2022_DISCOVERY = TseResourceContract(
     quotechar='"',
     source_timezone="America/Sao_Paulo",
     expected_mimetype="application/zip",
-    expected_headers=None,
+    expected_headers=TSE_CANDIDATES_2022_HEADERS,
     fallback_download_url=(
         "https://cdn.tse.jus.br/estatistica/sead/odsele/consulta_cand/consulta_cand_2022.zip"
     ),
 )
+
+# Retained as a deliberately schema-open contract for reproducible future probes.
+CANDIDATES_2022_DISCOVERY = replace(CANDIDATES_2022, expected_headers=None)
+
+_SUPPORTED_CANDIDATE_CONTRACTS = {
+    2022: CANDIDATES_2022,
+    2026: CANDIDATES_2026,
+}
+SUPPORTED_CANDIDATE_YEARS = tuple(sorted(_SUPPORTED_CANDIDATE_CONTRACTS))
+
+
+def candidates_contract_for_year(year: int) -> TseResourceContract:
+    """Return the frozen official candidates contract for one supported election year."""
+
+    try:
+        return _SUPPORTED_CANDIDATE_CONTRACTS[year]
+    except KeyError as exc:
+        raise ValueError(f"unsupported TSE candidates year: {year}") from exc

@@ -24,6 +24,7 @@ def start_run(engine: Engine, contract: TseResourceContract) -> int:
                 .values(
                     source=contract.source,
                     dataset=contract.dataset,
+                    scope_key=contract.scope_key,
                     status="running",
                 )
                 .returning(IngestionRun.id)
@@ -46,13 +47,16 @@ def fail_run(engine: Engine, run_id: int) -> None:
 
 
 def lock_artifact(connection: Connection, contract: TseResourceContract, checksum: str) -> None:
-    """Serialize all snapshots of the dataset until RAW and audit commit together.
+    """Serialize one source/dataset/election-year partition until commit.
 
-    The runner uses READ COMMITTED so the lookup after waiting sees the winner.
-    Hash collisions only serialize unrelated artifacts; they cannot skip them.
+    The checksum parameter remains part of the public helper signature because callers already pass it,
+    but the lock intentionally represents the logical partition, not one artifact revision.
     """
+    del checksum
     key = int.from_bytes(
-        hashlib.sha256(f"{contract.source}\0{contract.dataset}".encode()).digest()[:8],
+        hashlib.sha256(
+            f"{contract.source}\0{contract.dataset}\0{contract.scope_key}".encode()
+        ).digest()[:8],
         signed=True,
     )
     connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": key})
@@ -85,6 +89,18 @@ def changed_fields(
         for name, official_header in TSE_CANDIDATE_SOURCE_HEADERS.items()
         if name not in IGNORED_CHANGE_FIELDS and previous[name] != incoming[name]
     ]
+
+
+def sync_person_identity(connection: Connection) -> int:
+    """Reconcile all successful TSE candidacies into the stable person identity graph.
+
+    Production ingestion is PostgreSQL-only. SQLite is used by fast unit tests and cannot execute the
+    PostgreSQL SECURITY DEFINER function, so it deliberately returns zero there.
+    """
+    if connection.dialect.name != "postgresql":
+        return 0
+    value = connection.scalar(text("SELECT core.sync_person_identity_from_tse()"))
+    return int(value or 0)
 
 
 def _source_values(connection: Connection, raw_candidate_id: int) -> Mapping[str, object]:
@@ -246,12 +262,13 @@ def load_artifact(
             .where(
                 IngestionRun.source == contract.source,
                 IngestionRun.dataset == contract.dataset,
+                IngestionRun.scope_key == contract.scope_key,
                 IngestionRun.status == "success",
             )
             .order_by(IngestionRun.finished_at.desc().nulls_last(), IngestionRun.id.desc())
             .limit(1)
         )
-        # Run IDs reflect start order; completion under the dataset lock is apply order.
+        # Run IDs reflect start order; completion under the scoped lock is apply order.
         skip = previous == artifact.sha256
         status = "skipped" if skip else "success"
         added, modified, removed, unchanged = (
@@ -282,4 +299,6 @@ def load_artifact(
                 rows_rejected=0,
             )
         )
+        if not skip:
+            sync_person_identity(connection)
     return status

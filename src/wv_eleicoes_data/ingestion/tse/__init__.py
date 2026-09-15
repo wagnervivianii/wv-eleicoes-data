@@ -5,12 +5,21 @@ from wv_eleicoes_data.ingestion.tse.connector import (
     TseCandidatesConnector,
     TseIngestionError,
 )
-from wv_eleicoes_data.ingestion.tse.contracts import CANDIDATES_2026, TseResourceContract
+from wv_eleicoes_data.ingestion.tse.contracts import (
+    CANDIDATES_2022,
+    CANDIDATES_2026,
+    SUPPORTED_CANDIDATE_YEARS,
+    TseResourceContract,
+    candidates_contract_for_year,
+)
 
 __all__ = [
+    "CANDIDATES_2022",
     "CANDIDATES_2026",
+    "SUPPORTED_CANDIDATE_YEARS",
     "TseArtifact",
     "TseCandidatesConnector",
     "TseIngestionError",
     "TseResourceContract",
+    "candidates_contract_for_year",
 ]

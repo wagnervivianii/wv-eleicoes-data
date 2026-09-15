@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Integer, String, Text, func
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from wv_eleicoes_data.db.base import Base
@@ -10,7 +10,19 @@ class IngestionRun(Base):
     """Registra a execução de um pipeline de ingestão."""
 
     __tablename__ = "ingestion_run"
-    __table_args__ = {"schema": "audit"}
+    __table_args__ = (
+        CheckConstraint("btrim(scope_key) <> ''", name="scope_key_not_blank"),
+        Index(
+            "ix_ingestion_run_source_dataset_scope_status",
+            "source",
+            "dataset",
+            "scope_key",
+            "status",
+            "finished_at",
+            "id",
+        ),
+        {"schema": "audit"},
+    )
 
     id: Mapped[int] = mapped_column(
         BigInteger,
@@ -28,6 +40,12 @@ class IngestionRun(Base):
         String(120),
         nullable=False,
         index=True,
+    )
+
+    scope_key: Mapped[str] = mapped_column(
+        String(120),
+        nullable=False,
+        server_default="global",
     )
 
     status: Mapped[str] = mapped_column(
