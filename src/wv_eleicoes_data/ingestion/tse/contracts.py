@@ -53,6 +53,14 @@ TSE_CANDIDATES_2026_HEADERS = (
     "DS_SIT_TOT_TURNO",
 )
 
+TSE_CANDIDATE_DISCOVERY_REQUIRED_HEADERS = (
+    "DT_GERACAO",
+    "HH_GERACAO",
+    "ANO_ELEICAO",
+    "CD_ELEICAO",
+    "SQ_CANDIDATO",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class TseResourceContract:
@@ -71,7 +79,7 @@ class TseResourceContract:
     quotechar: str
     source_timezone: str
     expected_mimetype: str
-    expected_headers: tuple[str, ...]
+    expected_headers: tuple[str, ...] | None
     fallback_download_url: str | None = None
 
     @property
@@ -79,6 +87,12 @@ class TseResourceContract:
         """Return the CKAN endpoint used to discover the current download URL."""
 
         return f"{self.ckan_api_base_url}/resource_show"
+
+    @property
+    def is_schema_discovery(self) -> bool:
+        """Return whether this contract discovers instead of freezing the CSV schema."""
+
+        return self.expected_headers is None
 
 
 CANDIDATES_2026 = TseResourceContract(
@@ -98,5 +112,25 @@ CANDIDATES_2026 = TseResourceContract(
     expected_headers=TSE_CANDIDATES_2026_HEADERS,
     fallback_download_url=(
         "https://cdn.tse.jus.br/estatistica/sead/odsele/consulta_cand/consulta_cand_2026.zip"
+    ),
+)
+
+CANDIDATES_2022_DISCOVERY = TseResourceContract(
+    source="TSE",
+    dataset="candidatos",
+    election_year=2022,
+    package_id="8747bd50-e1f7-407a-8e24-2707126ccde6",
+    resource_id="435145fd-bc9d-446a-ac9d-273f585a0bb9",
+    ckan_api_base_url="https://dadosabertos.tse.jus.br/api/3/action",
+    artifact_name="consulta_cand_2022.zip",
+    canonical_csv_name="consulta_cand_2022_BRASIL.csv",
+    encoding="latin-1",
+    delimiter=";",
+    quotechar='"',
+    source_timezone="America/Sao_Paulo",
+    expected_mimetype="application/zip",
+    expected_headers=None,
+    fallback_download_url=(
+        "https://cdn.tse.jus.br/estatistica/sead/odsele/consulta_cand/consulta_cand_2022.zip"
     ),
 )

@@ -15,7 +15,10 @@ from wv_eleicoes_data.ingestion.tse.connector import (
     TseResourceMetadata,
     TseRetryableHttpError,
 )
-from wv_eleicoes_data.ingestion.tse.contracts import CANDIDATES_2026
+from wv_eleicoes_data.ingestion.tse.contracts import (
+    CANDIDATES_2022_DISCOVERY,
+    CANDIDATES_2026,
+)
 
 
 def _candidate_row(
@@ -75,6 +78,7 @@ def test_inspect_artifact_returns_checksum_rows_and_source_timestamp(tmp_path: P
     assert artifact.sha256 == hashlib.sha256(zip_bytes).hexdigest()
     assert artifact.size_bytes == len(zip_bytes)
     assert artifact.row_count == 2
+    assert artifact.headers == CANDIDATES_2026.expected_headers
     assert artifact.canonical_csv_name == CANDIDATES_2026.canonical_csv_name
     assert artifact.source_updated_at.isoformat() == "2026-09-11T12:30:43-03:00"
     assert artifact.source_updated_at.utcoffset() == timedelta(hours=-3)
@@ -264,3 +268,96 @@ def test_discovery_retries_exhaust_without_fallback(
     ):
         TseCandidatesConnector(client=client).discover_resource()
     assert len(requests) == 4
+
+
+def _build_discovery_zip(
+    headers: tuple[str, ...],
+    rows: list[list[str]],
+) -> bytes:
+    text_buffer = io.StringIO(newline="")
+    writer = csv.writer(
+        text_buffer,
+        delimiter=CANDIDATES_2022_DISCOVERY.delimiter,
+        quotechar=CANDIDATES_2022_DISCOVERY.quotechar,
+        lineterminator="\r\n",
+    )
+    writer.writerow(headers)
+    writer.writerows(rows)
+
+    zip_buffer = io.BytesIO()
+    with ZipFile(zip_buffer, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr(
+            CANDIDATES_2022_DISCOVERY.canonical_csv_name,
+            text_buffer.getvalue().encode(CANDIDATES_2022_DISCOVERY.encoding),
+        )
+    return zip_buffer.getvalue()
+
+
+def _discovery_resource() -> TseResourceMetadata:
+    return TseResourceMetadata(
+        resource_id=CANDIDATES_2022_DISCOVERY.resource_id,
+        package_id=CANDIDATES_2022_DISCOVERY.package_id,
+        name="Candidatos",
+        download_url="https://example.invalid/consulta_cand_2022.zip",
+        mimetype=CANDIDATES_2022_DISCOVERY.expected_mimetype,
+    )
+
+
+def test_schema_discovery_captures_historical_header_without_freezing_it(tmp_path: Path) -> None:
+    headers = (
+        "ANO_ELEICAO",
+        "DT_GERACAO",
+        "SQ_CANDIDATO",
+        "HH_GERACAO",
+        "CD_ELEICAO",
+        "CAMPO_HISTORICO",
+    )
+    row = ["2022", "02/10/2022", "220000000001", "08:30:00", "544", "valor"]
+    artifact_path = tmp_path / CANDIDATES_2022_DISCOVERY.artifact_name
+    artifact_path.write_bytes(_build_discovery_zip(headers, [row]))
+
+    artifact = TseCandidatesConnector(CANDIDATES_2022_DISCOVERY).inspect_artifact(
+        artifact_path,
+        _discovery_resource(),
+    )
+
+    assert artifact.headers == headers
+    assert artifact.row_count == 1
+    assert artifact.source_updated_at.isoformat() == "2022-10-02T08:30:00-03:00"
+
+
+def test_schema_discovery_rejects_missing_structural_candidate_header(tmp_path: Path) -> None:
+    headers = (
+        "ANO_ELEICAO",
+        "DT_GERACAO",
+        "HH_GERACAO",
+        "CD_ELEICAO",
+    )
+    row = ["2022", "02/10/2022", "08:30:00", "544"]
+    artifact_path = tmp_path / CANDIDATES_2022_DISCOVERY.artifact_name
+    artifact_path.write_bytes(_build_discovery_zip(headers, [row]))
+
+    with pytest.raises(TseIngestionError, match="SQ_CANDIDATO"):
+        TseCandidatesConnector(CANDIDATES_2022_DISCOVERY).inspect_artifact(
+            artifact_path,
+            _discovery_resource(),
+        )
+
+
+def test_schema_discovery_rejects_wrong_election_year(tmp_path: Path) -> None:
+    headers = (
+        "DT_GERACAO",
+        "HH_GERACAO",
+        "ANO_ELEICAO",
+        "CD_ELEICAO",
+        "SQ_CANDIDATO",
+    )
+    row = ["02/10/2022", "08:30:00", "2018", "544", "220000000001"]
+    artifact_path = tmp_path / CANDIDATES_2022_DISCOVERY.artifact_name
+    artifact_path.write_bytes(_build_discovery_zip(headers, [row]))
+
+    with pytest.raises(TseIngestionError, match="ANO_ELEICAO"):
+        TseCandidatesConnector(CANDIDATES_2022_DISCOVERY).inspect_artifact(
+            artifact_path,
+            _discovery_resource(),
+        )

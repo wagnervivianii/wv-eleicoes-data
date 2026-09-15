@@ -15,7 +15,11 @@ from zoneinfo import ZoneInfo
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from wv_eleicoes_data.ingestion.tse.contracts import CANDIDATES_2026, TseResourceContract
+from wv_eleicoes_data.ingestion.tse.contracts import (
+    CANDIDATES_2026,
+    TSE_CANDIDATE_DISCOVERY_REQUIRED_HEADERS,
+    TseResourceContract,
+)
 
 
 class TseIngestionError(RuntimeError):
@@ -46,12 +50,13 @@ class TseArtifact:
     size_bytes: int
     canonical_csv_name: str
     row_count: int
+    headers: tuple[str, ...]
     source_updated_at: datetime
     resource: TseResourceMetadata
 
 
 class TseCandidatesConnector:
-    """Download and validate the official TSE candidates artifact."""
+    """Download and validate an official TSE candidates artifact."""
 
     def __init__(
         self,
@@ -157,7 +162,7 @@ class TseCandidatesConnector:
                 self._validate_archive_paths(archive)
                 if archive.namelist().count(self.contract.canonical_csv_name) != 1:
                     raise TseIngestionError("canonical TSE CSV must occur exactly once")
-                row_count, source_updated_at = self._inspect_canonical_csv(archive)
+                row_count, headers, source_updated_at = self._inspect_canonical_csv(archive)
         except BadZipFile as exc:
             raise TseIngestionError("downloaded TSE artifact is a corrupt ZIP") from exc
 
@@ -167,6 +172,7 @@ class TseCandidatesConnector:
             size_bytes=path.stat().st_size,
             canonical_csv_name=self.contract.canonical_csv_name,
             row_count=row_count,
+            headers=headers,
             source_updated_at=source_updated_at,
             resource=resource,
         )
@@ -222,7 +228,7 @@ class TseCandidatesConnector:
     def _client_context(self) -> _HttpClientContext:
         return _HttpClientContext(self._client, self._timeout)
 
-    def _inspect_canonical_csv(self, archive: ZipFile) -> tuple[int, datetime]:
+    def _inspect_canonical_csv(self, archive: ZipFile) -> tuple[int, tuple[str, ...], datetime]:
         csv_name = self.contract.canonical_csv_name
 
         try:
@@ -248,10 +254,11 @@ class TseCandidatesConnector:
             except StopIteration as exc:
                 raise TseIngestionError("canonical TSE CSV is empty") from exc
 
-            if header != self.contract.expected_headers:
-                raise TseIngestionError(
-                    "canonical TSE CSV header differs from the configured contract"
-                )
+            self._validate_header(header)
+            header_index = {name: index for index, name in enumerate(header)}
+            date_index = header_index["DT_GERACAO"]
+            time_index = header_index["HH_GERACAO"]
+            year_index = header_index["ANO_ELEICAO"]
 
             for row_number, row in enumerate(reader, start=2):
                 if len(row) != len(header):
@@ -260,7 +267,13 @@ class TseCandidatesConnector:
                         f"expected {len(header)}"
                     )
 
-                row_generation = (row[0], row[1])
+                if row[year_index] != str(self.contract.election_year):
+                    raise TseIngestionError(
+                        f"canonical TSE CSV row {row_number} has ANO_ELEICAO={row[year_index]!r}; "
+                        f"expected {self.contract.election_year}"
+                    )
+
+                row_generation = (row[date_index], row[time_index])
                 if generation_value is None:
                     generation_value = row_generation
                 elif row_generation != generation_value:
@@ -273,7 +286,30 @@ class TseCandidatesConnector:
         if row_count == 0 or generation_value is None:
             raise TseIngestionError("canonical TSE CSV contains no candidate rows")
 
-        return row_count, self._parse_source_updated_at(*generation_value)
+        return row_count, header, self._parse_source_updated_at(*generation_value)
+
+    def _validate_header(self, header: tuple[str, ...]) -> None:
+        if not header:
+            raise TseIngestionError("canonical TSE CSV header is empty")
+
+        if len(set(header)) != len(header):
+            raise TseIngestionError("canonical TSE CSV contains duplicate header names")
+
+        if self.contract.expected_headers is not None:
+            if header != self.contract.expected_headers:
+                raise TseIngestionError(
+                    "canonical TSE CSV header differs from the configured contract"
+                )
+            return
+
+        missing = tuple(
+            field for field in TSE_CANDIDATE_DISCOVERY_REQUIRED_HEADERS if field not in header
+        )
+        if missing:
+            joined = ", ".join(missing)
+            raise TseIngestionError(
+                f"candidate schema discovery is missing required structural headers: {joined}"
+            )
 
     def _parse_source_updated_at(self, date_value: str, time_value: str) -> datetime:
         try:
