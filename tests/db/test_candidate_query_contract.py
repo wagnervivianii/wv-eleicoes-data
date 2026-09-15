@@ -26,8 +26,7 @@ def test_refresh_order_and_failure() -> None:
     refresh_candidates(engine)
     statements = [str(call.args[0]) for call in conn.execute.call_args_list]
     assert statements == [
-        "SELECT pg_advisory_xact_lock(2026, 58102)",
-        "REFRESH MATERIALIZED VIEW CONCURRENTLY analytics.candidate_2026",
+        "SELECT pg_advisory_xact_lock(58102, 3)",
         "REFRESH MATERIALIZED VIEW CONCURRENTLY analytics.candidate",
     ]
     conn.execute.side_effect = RuntimeError("refresh failed")

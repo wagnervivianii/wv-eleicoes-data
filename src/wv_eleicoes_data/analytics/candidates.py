@@ -22,16 +22,14 @@ QUERIES = {
 
 
 def refresh_candidates(engine: Engine) -> None:
-    """Owner only, after ingestion commits. Errors propagate for independent retry.
+    """Owner-only publication refresh after candidate ingestion commits.
 
-    A separate transaction atomically publishes both snapshots. The transaction
-    advisory lock serializes callers of this helper, including empty snapshots.
+    The longitudinal core view reads the active RAW state directly, so only the
+    public materialized projection needs refresh. The transaction advisory lock
+    serializes concurrent publishers.
     """
     with engine.begin() as connection:
-        connection.execute(text("SELECT pg_advisory_xact_lock(2026, 58102)"))
-        connection.execute(text(
-            "REFRESH MATERIALIZED VIEW CONCURRENTLY analytics.candidate_2026"
-        ))
+        connection.execute(text("SELECT pg_advisory_xact_lock(58102, 3)"))
         connection.execute(text(
             "REFRESH MATERIALIZED VIEW CONCURRENTLY analytics.candidate"
         ))
