@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Sequence
 
 from wv_eleicoes_data.ingestion.tse.connector import TseCandidatesConnector
 from wv_eleicoes_data.ingestion.tse.contracts import (

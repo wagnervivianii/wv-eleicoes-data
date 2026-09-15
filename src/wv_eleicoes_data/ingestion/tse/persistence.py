@@ -49,8 +49,9 @@ def fail_run(engine: Engine, run_id: int) -> None:
 def lock_artifact(connection: Connection, contract: TseResourceContract, checksum: str) -> None:
     """Serialize one source/dataset/election-year partition until commit.
 
-    The checksum parameter remains part of the public helper signature because callers already pass it,
-    but the lock intentionally represents the logical partition, not one artifact revision.
+    The checksum parameter remains part of the public helper signature because callers
+    already pass it, but the lock intentionally represents the logical partition,
+    not one artifact revision.
     """
     del checksum
     key = int.from_bytes(
@@ -94,8 +95,9 @@ def changed_fields(
 def sync_person_identity(connection: Connection) -> int:
     """Reconcile all successful TSE candidacies into the stable person identity graph.
 
-    Production ingestion is PostgreSQL-only. SQLite is used by fast unit tests and cannot execute the
-    PostgreSQL SECURITY DEFINER function, so it deliberately returns zero there.
+    Production ingestion is PostgreSQL-only. SQLite is used by fast unit tests and
+    cannot execute the PostgreSQL SECURITY DEFINER function, so it deliberately
+    returns zero there.
     """
     if connection.dialect.name != "postgresql":
         return 0
