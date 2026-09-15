@@ -2,6 +2,7 @@ from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import sqlalchemy as sa
 
 from wv_eleicoes_data.db.base import Base
@@ -22,14 +23,48 @@ def test_ingestion_run_model_has_scoped_audit_contract() -> None:
     assert Base.metadata.tables["audit.ingestion_run"] is table
     assert not table.c.scope_key.nullable
     assert table.c.scope_key.server_default is not None
-    assert any(
-        isinstance(constraint, sa.CheckConstraint)
-        and constraint.name == "ck_ingestion_run_scope_key_not_blank"
+    constraints = [
+        constraint
         for constraint in table.constraints
-    )
+        if isinstance(constraint, sa.CheckConstraint)
+        and constraint.name == "ck_ingestion_run_scope_key_not_blank"
+    ]
+    assert len(constraints) == 1
+    assert str(constraints[0].sqltext) == "trim(scope_key) <> ''"
     assert "ix_ingestion_run_source_dataset_scope_status" in {
         index.name for index in table.indexes
     }
+
+
+def test_ingestion_run_scope_check_works_on_sqlite_test_database() -> None:
+    engine = sa.create_engine("sqlite://")
+    metadata = sa.MetaData()
+    table = IngestionRun.__table__.to_metadata(metadata)
+    table.c.id.type = sa.Integer()
+
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("ATTACH DATABASE ':memory:' AS audit")
+            table.create(connection)
+            connection.execute(
+                sa.insert(table).values(
+                    source="TSE",
+                    dataset="candidatos",
+                    scope_key="election-year:2022",
+                    status="running",
+                )
+            )
+            with pytest.raises(sa.exc.IntegrityError):
+                connection.execute(
+                    sa.insert(table).values(
+                        source="TSE",
+                        dataset="candidatos",
+                        scope_key="   ",
+                        status="running",
+                    )
+                )
+    finally:
+        engine.dispose()
 
 
 def test_scope_migration_is_linear_and_backfills_existing_2026_runs() -> None:

@@ -11,7 +11,7 @@ class IngestionRun(Base):
 
     __tablename__ = "ingestion_run"
     __table_args__ = (
-        CheckConstraint("btrim(scope_key) <> ''", name="scope_key_not_blank"),
+        CheckConstraint("trim(scope_key) <> ''", name="scope_key_not_blank"),
         Index(
             "ix_ingestion_run_source_dataset_scope_status",
             "source",
