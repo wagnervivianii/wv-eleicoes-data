@@ -57,6 +57,32 @@ TSE_CANDIDATES_2026_HEADERS = (
 # Keep a semantic alias so future years may diverge without rewriting call sites.
 TSE_CANDIDATES_2022_HEADERS = TSE_CANDIDATES_2026_HEADERS
 
+
+TSE_ASSETS_2022_HEADERS = (
+    "DT_GERACAO",
+    "HH_GERACAO",
+    "ANO_ELEICAO",
+    "CD_TIPO_ELEICAO",
+    "NM_TIPO_ELEICAO",
+    "CD_ELEICAO",
+    "DS_ELEICAO",
+    "DT_ELEICAO",
+    "SG_UF",
+    "SG_UE",
+    "NM_UE",
+    "SQ_CANDIDATO",
+    "NR_ORDEM_BEM_CANDIDATO",
+    "CD_TIPO_BEM_CANDIDATO",
+    "DS_TIPO_BEM_CANDIDATO",
+    "DS_BEM_CANDIDATO",
+    "VR_BEM_CANDIDATO",
+    "DT_ULT_ATUAL_BEM_CANDIDATO",
+    "HH_ULT_ATUAL_BEM_CANDIDATO",
+)
+
+# The official 2022/2026 probe on 2026-09-15 proved exact positional equality.
+TSE_ASSETS_2026_HEADERS = TSE_ASSETS_2022_HEADERS
+
 TSE_TABULAR_DISCOVERY_REQUIRED_HEADERS = (
     "DT_GERACAO",
     "HH_GERACAO",
@@ -227,3 +253,30 @@ def assets_discovery_contract_for_year(year: int) -> TseResourceContract:
         return _SUPPORTED_ASSET_DISCOVERY_CONTRACTS[year]
     except KeyError as exc:
         raise ValueError(f"unsupported TSE assets discovery year: {year}") from exc
+
+
+ASSETS_2022 = replace(
+    ASSETS_2022_DISCOVERY,
+    expected_headers=TSE_ASSETS_2022_HEADERS,
+)
+
+ASSETS_2026 = replace(
+    ASSETS_2026_DISCOVERY,
+    expected_headers=TSE_ASSETS_2026_HEADERS,
+)
+
+_SUPPORTED_ASSET_CONTRACTS = {
+    2022: ASSETS_2022,
+    2026: ASSETS_2026,
+}
+SUPPORTED_ASSET_YEARS = tuple(sorted(_SUPPORTED_ASSET_CONTRACTS))
+
+
+def assets_contract_for_year(year: int) -> TseResourceContract:
+    """Return the frozen official declared-assets contract for one supported year."""
+
+    try:
+        return _SUPPORTED_ASSET_CONTRACTS[year]
+    except KeyError as exc:
+        raise ValueError(f"unsupported TSE assets year: {year}") from exc
+

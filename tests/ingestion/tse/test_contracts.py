@@ -1,15 +1,21 @@
 import pytest
 
 from wv_eleicoes_data.ingestion.tse.contracts import (
+    ASSETS_2022,
     ASSETS_2022_DISCOVERY,
+    ASSETS_2026,
     ASSETS_2026_DISCOVERY,
     CANDIDATES_2022,
     CANDIDATES_2022_DISCOVERY,
     CANDIDATES_2026,
     SUPPORTED_ASSET_DISCOVERY_YEARS,
+    SUPPORTED_ASSET_YEARS,
     SUPPORTED_CANDIDATE_YEARS,
+    TSE_ASSETS_2022_HEADERS,
+    TSE_ASSETS_2026_HEADERS,
     TSE_CANDIDATES_2022_HEADERS,
     TSE_CANDIDATES_2026_HEADERS,
+    assets_contract_for_year,
     assets_discovery_contract_for_year,
     candidates_contract_for_year,
 )
@@ -100,3 +106,34 @@ def test_assets_probe_uses_only_generic_structural_headers_before_freezing_schem
     expected = ("DT_GERACAO", "HH_GERACAO", "ANO_ELEICAO")
     assert ASSETS_2022_DISCOVERY.discovery_required_headers == expected
     assert ASSETS_2026_DISCOVERY.discovery_required_headers == expected
+
+
+def test_assets_frozen_contracts_match_observed_two_year_layout() -> None:
+    assert SUPPORTED_ASSET_YEARS == (2022, 2026)
+    assert len(TSE_ASSETS_2022_HEADERS) == 19
+    assert len(set(TSE_ASSETS_2022_HEADERS)) == 19
+    assert TSE_ASSETS_2022_HEADERS == TSE_ASSETS_2026_HEADERS
+    assert TSE_ASSETS_2022_HEADERS[-7:] == (
+        "NR_ORDEM_BEM_CANDIDATO",
+        "CD_TIPO_BEM_CANDIDATO",
+        "DS_TIPO_BEM_CANDIDATO",
+        "DS_BEM_CANDIDATO",
+        "VR_BEM_CANDIDATO",
+        "DT_ULT_ATUAL_BEM_CANDIDATO",
+        "HH_ULT_ATUAL_BEM_CANDIDATO",
+    )
+    assert ASSETS_2022.expected_headers == TSE_ASSETS_2022_HEADERS
+    assert ASSETS_2026.expected_headers == TSE_ASSETS_2026_HEADERS
+    assert ASSETS_2022.is_schema_discovery is False
+    assert ASSETS_2026.is_schema_discovery is False
+    assert assets_contract_for_year(2022) is ASSETS_2022
+    assert assets_contract_for_year(2026) is ASSETS_2026
+    with pytest.raises(ValueError, match="unsupported TSE assets year"):
+        assets_contract_for_year(2018)
+
+
+def test_assets_discovery_contracts_remain_open_after_freezing() -> None:
+    assert ASSETS_2022_DISCOVERY.expected_headers is None
+    assert ASSETS_2026_DISCOVERY.expected_headers is None
+    assert ASSETS_2022.resource_id == ASSETS_2022_DISCOVERY.resource_id
+    assert ASSETS_2026.resource_id == ASSETS_2026_DISCOVERY.resource_id
