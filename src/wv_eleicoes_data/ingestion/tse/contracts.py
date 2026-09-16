@@ -57,10 +57,14 @@ TSE_CANDIDATES_2026_HEADERS = (
 # Keep a semantic alias so future years may diverge without rewriting call sites.
 TSE_CANDIDATES_2022_HEADERS = TSE_CANDIDATES_2026_HEADERS
 
-TSE_CANDIDATE_DISCOVERY_REQUIRED_HEADERS = (
+TSE_TABULAR_DISCOVERY_REQUIRED_HEADERS = (
     "DT_GERACAO",
     "HH_GERACAO",
     "ANO_ELEICAO",
+)
+
+TSE_CANDIDATE_DISCOVERY_REQUIRED_HEADERS = (
+    *TSE_TABULAR_DISCOVERY_REQUIRED_HEADERS,
     "CD_ELEICAO",
     "SQ_CANDIDATO",
 )
@@ -85,6 +89,7 @@ class TseResourceContract:
     expected_mimetype: str
     expected_headers: tuple[str, ...] | None
     fallback_download_url: str | None = None
+    discovery_required_headers: tuple[str, ...] = TSE_CANDIDATE_DISCOVERY_REQUIRED_HEADERS
 
     @property
     def resource_show_url(self) -> str:
@@ -100,7 +105,7 @@ class TseResourceContract:
 
     @property
     def scope_key(self) -> str:
-        """Return the audit/idempotency scope for this annual candidates snapshot."""
+        """Return the audit/idempotency scope for this annual election resource."""
 
         return f"election-year:{self.election_year}"
 
@@ -162,3 +167,63 @@ def candidates_contract_for_year(year: int) -> TseResourceContract:
         return _SUPPORTED_CANDIDATE_CONTRACTS[year]
     except KeyError as exc:
         raise ValueError(f"unsupported TSE candidates year: {year}") from exc
+
+
+ASSETS_2022_DISCOVERY = TseResourceContract(
+    source="TSE",
+    dataset="bens_candidatos",
+    election_year=2022,
+    package_id="8747bd50-e1f7-407a-8e24-2707126ccde6",
+    resource_id="fac824ef-8519-4c75-b634-378e6fcc717f",
+    ckan_api_base_url="https://dadosabertos.tse.jus.br/api/3/action",
+    artifact_name="bem_candidato_2022.zip",
+    canonical_csv_name="bem_candidato_2022_BRASIL.csv",
+    encoding="latin-1",
+    delimiter=";",
+    quotechar='"',
+    source_timezone="America/Sao_Paulo",
+    expected_mimetype="application/zip",
+    expected_headers=None,
+    fallback_download_url=(
+        "https://cdn.tse.jus.br/estatistica/sead/odsele/bem_candidato/"
+        "bem_candidato_2022.zip"
+    ),
+    discovery_required_headers=TSE_TABULAR_DISCOVERY_REQUIRED_HEADERS,
+)
+
+ASSETS_2026_DISCOVERY = TseResourceContract(
+    source="TSE",
+    dataset="bens_candidatos",
+    election_year=2026,
+    package_id="ba2d7d69-5bf5-4379-8c91-664c11f75a2e",
+    resource_id="33fbda56-eb41-46f5-a8a0-8b499c285a1d",
+    ckan_api_base_url="https://dadosabertos.tse.jus.br/api/3/action",
+    artifact_name="bem_candidato_2026.zip",
+    canonical_csv_name="bem_candidato_2026_BRASIL.csv",
+    encoding="latin-1",
+    delimiter=";",
+    quotechar='"',
+    source_timezone="America/Sao_Paulo",
+    expected_mimetype="application/zip",
+    expected_headers=None,
+    fallback_download_url=(
+        "https://cdn.tse.jus.br/estatistica/sead/odsele/bem_candidato/"
+        "bem_candidato_2026.zip"
+    ),
+    discovery_required_headers=TSE_TABULAR_DISCOVERY_REQUIRED_HEADERS,
+)
+
+_SUPPORTED_ASSET_DISCOVERY_CONTRACTS = {
+    2022: ASSETS_2022_DISCOVERY,
+    2026: ASSETS_2026_DISCOVERY,
+}
+SUPPORTED_ASSET_DISCOVERY_YEARS = tuple(sorted(_SUPPORTED_ASSET_DISCOVERY_CONTRACTS))
+
+
+def assets_discovery_contract_for_year(year: int) -> TseResourceContract:
+    """Return the schema-open official assets contract for one supported election year."""
+
+    try:
+        return _SUPPORTED_ASSET_DISCOVERY_CONTRACTS[year]
+    except KeyError as exc:
+        raise ValueError(f"unsupported TSE assets discovery year: {year}") from exc

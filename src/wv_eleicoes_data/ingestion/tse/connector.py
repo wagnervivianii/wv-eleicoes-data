@@ -17,7 +17,6 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from wv_eleicoes_data.ingestion.tse.contracts import (
     CANDIDATES_2026,
-    TSE_CANDIDATE_DISCOVERY_REQUIRED_HEADERS,
     TseResourceContract,
 )
 
@@ -43,7 +42,7 @@ class TseResourceMetadata:
 
 @dataclass(frozen=True, slots=True)
 class TseArtifact:
-    """Validated local snapshot of the canonical TSE candidates resource."""
+    """Validated local snapshot of one canonical TSE tabular resource."""
 
     path: Path
     sha256: str
@@ -56,7 +55,7 @@ class TseArtifact:
 
 
 class TseCandidatesConnector:
-    """Download and validate an official TSE candidates artifact."""
+    """Download and validate an official TSE tabular artifact."""
 
     def __init__(
         self,
@@ -284,7 +283,7 @@ class TseCandidatesConnector:
                 row_count += 1
 
         if row_count == 0 or generation_value is None:
-            raise TseIngestionError("canonical TSE CSV contains no candidate rows")
+            raise TseIngestionError("canonical TSE CSV contains no data rows")
 
         return row_count, header, self._parse_source_updated_at(*generation_value)
 
@@ -303,12 +302,12 @@ class TseCandidatesConnector:
             return
 
         missing = tuple(
-            field for field in TSE_CANDIDATE_DISCOVERY_REQUIRED_HEADERS if field not in header
+            field for field in self.contract.discovery_required_headers if field not in header
         )
         if missing:
             joined = ", ".join(missing)
             raise TseIngestionError(
-                f"candidate schema discovery is missing required structural headers: {joined}"
+                f"schema discovery is missing required structural headers: {joined}"
             )
 
     def _parse_source_updated_at(self, date_value: str, time_value: str) -> datetime:
