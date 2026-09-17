@@ -139,7 +139,9 @@ def test_refresh_declared_assets_is_locked_and_dependency_ordered() -> None:
 
     sql = [call.args[0].text for call in connection.execute.call_args_list]
     assert sql == [
+        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ",
         "SELECT pg_advisory_xact_lock(58102, 4)",
+        "REFRESH MATERIALIZED VIEW analytics.candidate_asset_item",
         "REFRESH MATERIALIZED VIEW analytics.candidate_asset_summary",
         "REFRESH MATERIALIZED VIEW analytics.candidate_asset_type",
         "REFRESH MATERIALIZED VIEW analytics.person_asset_evolution",

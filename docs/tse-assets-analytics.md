@@ -1,10 +1,25 @@
 # TSE declared assets — ANALYTICS serving contract
 
-Unit 09 publishes serving aggregates derived from `core.candidate_asset`. The source remains
-TSE candidate-declared assets; the platform describes these values as **bens declarados ao
+Unit 09 publishes serving aggregates derived from `core.candidate_asset`. Unit 10c adds the
+item-level serving relation used by public declaration detail. The source remains TSE
+candidate-declared assets; the platform describes these values as **bens declarados ao
 TSE** and **valores declarados**, not as an independent measure of real wealth.
 
 ## Relations
+
+### `analytics.candidate_asset_item`
+
+One row per canonical CORE asset row. It preserves `raw_asset_id` as the physical lineage
+identity and carries the already-canonicalized person, election, candidacy, item, monetary
+and source-snapshot fields from `core.candidate_asset`.
+
+The relation does not reinterpret values and does not access RAW or AUDIT directly. It is a
+serving materialization so request-time detail reads do not repeatedly expand the CORE view
+through RAW joins and canonicalization expressions.
+
+Its unique index is only on `raw_asset_id`; no new semantic uniqueness is invented for TSE
+business fields. A separate declaration lookup index serves
+`person_id + election_year + election_code + candidacy_sequence`, ordered by `asset_order`.
 
 ### `analytics.candidate_asset_summary`
 
@@ -72,30 +87,34 @@ snapshot when the official source provides more than one.
 
 ## Refresh contract
 
-The materialized views are populated by the migration and later refreshed by
+The materialized views are populated by migrations and later refreshed by
 `wv_eleicoes_data.analytics.assets.refresh_declared_assets()` in dependency order:
 
-1. candidate summary;
-2. type composition;
-3. person annual evolution.
+1. candidate item serving;
+2. candidate summary;
+3. type composition;
+4. person annual evolution.
 
-The helper uses a transaction advisory lock. It is owner/migration-only. The ingestion role
-intentionally has no access to CORE/ANALYTICS serving relations.
+The helper starts with `REPEATABLE READ`, then acquires the transaction-scoped advisory
+lock. All four publications therefore observe the same external database snapshot while
+remaining atomic to readers at commit. The helper is owner/migration-only. The ingestion
+role intentionally has no access to CORE/ANALYTICS serving relations.
 
-## Integrity gate
+## Integrity gates
 
-Migration `j2582026as03` refuses to complete if:
+Migration `j2582026as03` guards aggregate and evolution semantics. Migration
+`k3692026as04` additionally refuses to complete if:
 
-- the number of summary scopes differs from distinct CORE candidacy scopes;
-- summary item counts do not reconcile to CORE rows;
-- type-composition item counts do not reconcile to CORE rows;
-- evolution rows differ from distinct `person_id + election_year` scopes;
-- any evolution row points to the same or a later previous year;
-- annual snapshot status disagrees with its candidacy-snapshot count;
-- a non-comparable row publishes a percentage; or
-- signed totals do not equal positive + negative subtotals.
+- item-serving row count differs from CORE;
+- a `raw_asset_id` is duplicated;
+- an item serving key is incomplete;
+- item counts do not reconcile with `candidate_asset_summary`;
+- negative-item counts do not reconcile with the summary; or
+- signed declared-value totals differ from the summary, including NULL semantics.
+
+No gate uses `ABS`, a zero clamp, or a replacement value for negative declarations.
 
 ## Access
 
-`wv_eleicoes_api` receives `SELECT` on the three ANALYTICS relations. PUBLIC and
+`wv_eleicoes_api` receives `SELECT` on the four ANALYTICS relations. PUBLIC and
 `wv_eleicoes_ingestion` receive no privileges.
