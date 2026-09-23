@@ -11,13 +11,27 @@ from wv_eleicoes_data.ingestion.tse.contracts import (
     SUPPORTED_ASSET_DISCOVERY_YEARS,
     SUPPORTED_ASSET_YEARS,
     SUPPORTED_CANDIDATE_YEARS,
+    SUPPORTED_VOTE_DISCOVERY_YEARS,
+    SUPPORTED_VOTE_YEARS,
     TSE_ASSETS_2022_HEADERS,
     TSE_ASSETS_2026_HEADERS,
     TSE_CANDIDATES_2022_HEADERS,
     TSE_CANDIDATES_2026_HEADERS,
+    TSE_NOMINAL_VOTE_GRAIN_HEADERS,
+    TSE_VOTES_2014_HEADERS,
+    TSE_VOTES_2018_HEADERS,
+    TSE_VOTES_2022_HEADERS,
+    VOTES_2014,
+    VOTES_2014_DISCOVERY,
+    VOTES_2018,
+    VOTES_2018_DISCOVERY,
+    VOTES_2022,
+    VOTES_2022_DISCOVERY,
     assets_contract_for_year,
     assets_discovery_contract_for_year,
     candidates_contract_for_year,
+    votes_contract_for_year,
+    votes_discovery_contract_for_year,
 )
 
 
@@ -137,3 +151,133 @@ def test_assets_discovery_contracts_remain_open_after_freezing() -> None:
     assert ASSETS_2026_DISCOVERY.expected_headers is None
     assert ASSETS_2022.resource_id == ASSETS_2022_DISCOVERY.resource_id
     assert ASSETS_2026.resource_id == ASSETS_2026_DISCOVERY.resource_id
+
+def test_vote_discovery_contracts_match_official_resource_metadata() -> None:
+    assert SUPPORTED_VOTE_DISCOVERY_YEARS == (2014, 2018, 2022)
+
+    assert VOTES_2014_DISCOVERY.package_id == "05b7d86e-d784-4b9c-8ba5-4428d64e4ec2"
+    assert VOTES_2014_DISCOVERY.resource_id == "9df2487a-7d41-4e1f-8ca1-a9dbe43fdd02"
+    assert VOTES_2018_DISCOVERY.package_id == "76d7bbbb-14c6-4b9a-beec-9ed87c2ad8b6"
+    assert VOTES_2018_DISCOVERY.resource_id == "e1dae37e-c2d6-493c-bf66-437f3788af89"
+    assert VOTES_2022_DISCOVERY.package_id == "5db2c9ef-a63b-4c0c-a2ec-d08002f49897"
+    assert VOTES_2022_DISCOVERY.resource_id == "40fdcf49-256a-4c81-87cf-711545bd1528"
+
+    assert VOTES_2014_DISCOVERY.canonical_csv_name == (
+        "votacao_candidato_munzona_2014_BRASIL.csv"
+    )
+    assert VOTES_2018_DISCOVERY.canonical_csv_name == (
+        "votacao_candidato_munzona_2018_BRASIL.csv"
+    )
+    assert VOTES_2022_DISCOVERY.canonical_csv_name == (
+        "votacao_candidato_munzona_2022_BRASIL.csv"
+    )
+
+    for contract in (
+        VOTES_2014_DISCOVERY,
+        VOTES_2018_DISCOVERY,
+        VOTES_2022_DISCOVERY,
+    ):
+        assert contract.source == "TSE"
+        assert contract.dataset == "votacao_candidato_munzona"
+        assert contract.expected_mimetype == "application/zip"
+        assert contract.expected_headers is None
+        assert contract.is_schema_discovery is True
+        assert contract.fallback_download_url is not None
+
+    assert votes_discovery_contract_for_year(2014) is VOTES_2014_DISCOVERY
+    assert votes_discovery_contract_for_year(2018) is VOTES_2018_DISCOVERY
+    assert votes_discovery_contract_for_year(2022) is VOTES_2022_DISCOVERY
+
+    with pytest.raises(ValueError, match="unsupported TSE votes discovery year"):
+        votes_discovery_contract_for_year(2026)
+
+
+def test_vote_discovery_requires_the_stable_cross_year_grain_headers() -> None:
+    expected = (
+        "DT_GERACAO",
+        "HH_GERACAO",
+        "ANO_ELEICAO",
+        "CD_ELEICAO",
+        "NR_TURNO",
+        "SG_UF",
+        "CD_MUNICIPIO",
+        "NR_ZONA",
+        "SQ_CANDIDATO",
+        "ST_VOTO_EM_TRANSITO",
+        "QT_VOTOS_NOMINAIS",
+    )
+
+    assert VOTES_2014_DISCOVERY.discovery_required_headers == expected
+    assert VOTES_2018_DISCOVERY.discovery_required_headers == expected
+    assert VOTES_2022_DISCOVERY.discovery_required_headers == expected
+
+
+def test_vote_frozen_contracts_preserve_observed_historical_layouts() -> None:
+    assert SUPPORTED_VOTE_YEARS == (2014, 2018, 2022)
+
+    assert len(TSE_VOTES_2014_HEADERS) == 38
+    assert len(set(TSE_VOTES_2014_HEADERS)) == 38
+
+    assert len(TSE_VOTES_2018_HEADERS) == 50
+    assert len(set(TSE_VOTES_2018_HEADERS)) == 50
+
+    assert len(TSE_VOTES_2022_HEADERS) == 50
+    assert len(set(TSE_VOTES_2022_HEADERS)) == 50
+
+    assert TSE_VOTES_2018_HEADERS[:31] == TSE_VOTES_2022_HEADERS[:31]
+    assert TSE_VOTES_2018_HEADERS[31:33] == (
+        "CD_SITUACAO_DIPLOMA",
+        "DS_SITUACAO_DIPLOMA",
+    )
+    assert TSE_VOTES_2022_HEADERS[31:33] == (
+        "CD_SITUACAO_DCONST_DIPLOMA",
+        "DS_SITUACAO_DCONST_DIPLOMA",
+    )
+    assert TSE_VOTES_2018_HEADERS[33:] == TSE_VOTES_2022_HEADERS[33:]
+
+    assert VOTES_2014.expected_headers == TSE_VOTES_2014_HEADERS
+    assert VOTES_2018.expected_headers == TSE_VOTES_2018_HEADERS
+    assert VOTES_2022.expected_headers == TSE_VOTES_2022_HEADERS
+
+    assert votes_contract_for_year(2014) is VOTES_2014
+    assert votes_contract_for_year(2018) is VOTES_2018
+    assert votes_contract_for_year(2022) is VOTES_2022
+
+    with pytest.raises(ValueError, match="unsupported TSE votes year"):
+        votes_contract_for_year(2026)
+
+
+def test_nominal_vote_grain_is_available_in_every_supported_layout() -> None:
+    assert TSE_NOMINAL_VOTE_GRAIN_HEADERS == (
+        "ANO_ELEICAO",
+        "CD_ELEICAO",
+        "NR_TURNO",
+        "SG_UF",
+        "CD_MUNICIPIO",
+        "NR_ZONA",
+        "SQ_CANDIDATO",
+        "ST_VOTO_EM_TRANSITO",
+    )
+
+    for headers in (
+        TSE_VOTES_2014_HEADERS,
+        TSE_VOTES_2018_HEADERS,
+        TSE_VOTES_2022_HEADERS,
+    ):
+        assert all(field in headers for field in TSE_NOMINAL_VOTE_GRAIN_HEADERS)
+
+
+def test_vote_fallback_urls_are_pinned_to_the_official_tse_cdn() -> None:
+    assert VOTES_2014_DISCOVERY.fallback_download_url == (
+        "https://cdn.tse.jus.br/estatistica/sead/odsele/votacao_candidato_munzona/"
+        "votacao_candidato_munzona_2014.zip"
+    )
+    assert VOTES_2018_DISCOVERY.fallback_download_url == (
+        "https://cdn.tse.jus.br/estatistica/sead/odsele/votacao_candidato_munzona/"
+        "votacao_candidato_munzona_2018.zip"
+    )
+    assert VOTES_2022_DISCOVERY.fallback_download_url == (
+        "https://cdn.tse.jus.br/estatistica/sead/odsele/votacao_candidato_munzona/"
+        "votacao_candidato_munzona_2022.zip"
+    )
+

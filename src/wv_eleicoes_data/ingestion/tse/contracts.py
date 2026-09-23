@@ -83,10 +83,182 @@ TSE_ASSETS_2022_HEADERS = (
 # The official 2022/2026 probe on 2026-09-15 proved exact positional equality.
 TSE_ASSETS_2026_HEADERS = TSE_ASSETS_2022_HEADERS
 
+
+TSE_VOTES_2014_HEADERS = (
+    "DT_GERACAO",
+    "HH_GERACAO",
+    "ANO_ELEICAO",
+    "CD_TIPO_ELEICAO",
+    "NM_TIPO_ELEICAO",
+    "NR_TURNO",
+    "CD_ELEICAO",
+    "DS_ELEICAO",
+    "DT_ELEICAO",
+    "TP_ABRANGENCIA",
+    "SG_UF",
+    "SG_UE",
+    "NM_UE",
+    "CD_MUNICIPIO",
+    "NM_MUNICIPIO",
+    "NR_ZONA",
+    "CD_CARGO",
+    "DS_CARGO",
+    "SQ_CANDIDATO",
+    "NR_CANDIDATO",
+    "NM_CANDIDATO",
+    "NM_URNA_CANDIDATO",
+    "NM_SOCIAL_CANDIDATO",
+    "CD_SITUACAO_CANDIDATURA",
+    "DS_SITUACAO_CANDIDATURA",
+    "CD_DETALHE_SITUACAO_CAND",
+    "DS_DETALHE_SITUACAO_CAND",
+    "TP_AGREMIACAO",
+    "NR_PARTIDO",
+    "SG_PARTIDO",
+    "NM_PARTIDO",
+    "SQ_COLIGACAO",
+    "NM_COLIGACAO",
+    "DS_COMPOSICAO_COLIGACAO",
+    "CD_SIT_TOT_TURNO",
+    "DS_SIT_TOT_TURNO",
+    "ST_VOTO_EM_TRANSITO",
+    "QT_VOTOS_NOMINAIS",
+)
+
+TSE_VOTES_2018_HEADERS = (
+    "DT_GERACAO",
+    "HH_GERACAO",
+    "ANO_ELEICAO",
+    "CD_TIPO_ELEICAO",
+    "NM_TIPO_ELEICAO",
+    "NR_TURNO",
+    "CD_ELEICAO",
+    "DS_ELEICAO",
+    "DT_ELEICAO",
+    "TP_ABRANGENCIA",
+    "SG_UF",
+    "SG_UE",
+    "NM_UE",
+    "CD_MUNICIPIO",
+    "NM_MUNICIPIO",
+    "NR_ZONA",
+    "CD_CARGO",
+    "DS_CARGO",
+    "SQ_CANDIDATO",
+    "NR_CANDIDATO",
+    "NM_CANDIDATO",
+    "NM_URNA_CANDIDATO",
+    "NM_SOCIAL_CANDIDATO",
+    "CD_SITUACAO_CANDIDATURA",
+    "DS_SITUACAO_CANDIDATURA",
+    "CD_DETALHE_SITUACAO_CAND",
+    "DS_DETALHE_SITUACAO_CAND",
+    "CD_SITUACAO_JULGAMENTO",
+    "DS_SITUACAO_JULGAMENTO",
+    "CD_SITUACAO_CASSACAO",
+    "DS_SITUACAO_CASSACAO",
+    "CD_SITUACAO_DIPLOMA",
+    "DS_SITUACAO_DIPLOMA",
+    "TP_AGREMIACAO",
+    "NR_PARTIDO",
+    "SG_PARTIDO",
+    "NM_PARTIDO",
+    "NR_FEDERACAO",
+    "NM_FEDERACAO",
+    "SG_FEDERACAO",
+    "DS_COMPOSICAO_FEDERACAO",
+    "SQ_COLIGACAO",
+    "NM_COLIGACAO",
+    "DS_COMPOSICAO_COLIGACAO",
+    "ST_VOTO_EM_TRANSITO",
+    "QT_VOTOS_NOMINAIS",
+    "NM_TIPO_DESTINACAO_VOTOS",
+    "QT_VOTOS_NOMINAIS_VALIDOS",
+    "CD_SIT_TOT_TURNO",
+    "DS_SIT_TOT_TURNO",
+)
+
+TSE_VOTES_2022_HEADERS = (
+    "DT_GERACAO",
+    "HH_GERACAO",
+    "ANO_ELEICAO",
+    "CD_TIPO_ELEICAO",
+    "NM_TIPO_ELEICAO",
+    "NR_TURNO",
+    "CD_ELEICAO",
+    "DS_ELEICAO",
+    "DT_ELEICAO",
+    "TP_ABRANGENCIA",
+    "SG_UF",
+    "SG_UE",
+    "NM_UE",
+    "CD_MUNICIPIO",
+    "NM_MUNICIPIO",
+    "NR_ZONA",
+    "CD_CARGO",
+    "DS_CARGO",
+    "SQ_CANDIDATO",
+    "NR_CANDIDATO",
+    "NM_CANDIDATO",
+    "NM_URNA_CANDIDATO",
+    "NM_SOCIAL_CANDIDATO",
+    "CD_SITUACAO_CANDIDATURA",
+    "DS_SITUACAO_CANDIDATURA",
+    "CD_DETALHE_SITUACAO_CAND",
+    "DS_DETALHE_SITUACAO_CAND",
+    "CD_SITUACAO_JULGAMENTO",
+    "DS_SITUACAO_JULGAMENTO",
+    "CD_SITUACAO_CASSACAO",
+    "DS_SITUACAO_CASSACAO",
+    "CD_SITUACAO_DCONST_DIPLOMA",
+    "DS_SITUACAO_DCONST_DIPLOMA",
+    "TP_AGREMIACAO",
+    "NR_PARTIDO",
+    "SG_PARTIDO",
+    "NM_PARTIDO",
+    "NR_FEDERACAO",
+    "NM_FEDERACAO",
+    "SG_FEDERACAO",
+    "DS_COMPOSICAO_FEDERACAO",
+    "SQ_COLIGACAO",
+    "NM_COLIGACAO",
+    "DS_COMPOSICAO_COLIGACAO",
+    "ST_VOTO_EM_TRANSITO",
+    "QT_VOTOS_NOMINAIS",
+    "NM_TIPO_DESTINACAO_VOTOS",
+    "QT_VOTOS_NOMINAIS_VALIDOS",
+    "CD_SIT_TOT_TURNO",
+    "DS_SIT_TOT_TURNO",
+)
+
+TSE_NOMINAL_VOTE_GRAIN_HEADERS = (
+    "ANO_ELEICAO",
+    "CD_ELEICAO",
+    "NR_TURNO",
+    "SG_UF",
+    "CD_MUNICIPIO",
+    "NR_ZONA",
+    "SQ_CANDIDATO",
+    "ST_VOTO_EM_TRANSITO",
+)
+
 TSE_TABULAR_DISCOVERY_REQUIRED_HEADERS = (
     "DT_GERACAO",
     "HH_GERACAO",
     "ANO_ELEICAO",
+)
+
+
+TSE_VOTE_DISCOVERY_REQUIRED_HEADERS = (
+    *TSE_TABULAR_DISCOVERY_REQUIRED_HEADERS,
+    "CD_ELEICAO",
+    "NR_TURNO",
+    "SG_UF",
+    "CD_MUNICIPIO",
+    "NR_ZONA",
+    "SQ_CANDIDATO",
+    "ST_VOTO_EM_TRANSITO",
+    "QT_VOTOS_NOMINAIS",
 )
 
 TSE_CANDIDATE_DISCOVERY_REQUIRED_HEADERS = (
@@ -279,4 +451,118 @@ def assets_contract_for_year(year: int) -> TseResourceContract:
         return _SUPPORTED_ASSET_CONTRACTS[year]
     except KeyError as exc:
         raise ValueError(f"unsupported TSE assets year: {year}") from exc
+
+VOTES_2014_DISCOVERY = TseResourceContract(
+    source="TSE",
+    dataset="votacao_candidato_munzona",
+    election_year=2014,
+    package_id="05b7d86e-d784-4b9c-8ba5-4428d64e4ec2",
+    resource_id="9df2487a-7d41-4e1f-8ca1-a9dbe43fdd02",
+    ckan_api_base_url="https://dadosabertos.tse.jus.br/api/3/action",
+    artifact_name="votacao_candidato_munzona_2014.zip",
+    canonical_csv_name="votacao_candidato_munzona_2014_BRASIL.csv",
+    encoding="latin-1",
+    delimiter=";",
+    quotechar='"',
+    source_timezone="America/Sao_Paulo",
+    expected_mimetype="application/zip",
+    expected_headers=None,
+    fallback_download_url=(
+        "https://cdn.tse.jus.br/estatistica/sead/odsele/votacao_candidato_munzona/"
+        "votacao_candidato_munzona_2014.zip"
+    ),
+    discovery_required_headers=TSE_VOTE_DISCOVERY_REQUIRED_HEADERS,
+)
+
+VOTES_2018_DISCOVERY = TseResourceContract(
+    source="TSE",
+    dataset="votacao_candidato_munzona",
+    election_year=2018,
+    package_id="76d7bbbb-14c6-4b9a-beec-9ed87c2ad8b6",
+    resource_id="e1dae37e-c2d6-493c-bf66-437f3788af89",
+    ckan_api_base_url="https://dadosabertos.tse.jus.br/api/3/action",
+    artifact_name="votacao_candidato_munzona_2018.zip",
+    canonical_csv_name="votacao_candidato_munzona_2018_BRASIL.csv",
+    encoding="latin-1",
+    delimiter=";",
+    quotechar='"',
+    source_timezone="America/Sao_Paulo",
+    expected_mimetype="application/zip",
+    expected_headers=None,
+    fallback_download_url=(
+        "https://cdn.tse.jus.br/estatistica/sead/odsele/votacao_candidato_munzona/"
+        "votacao_candidato_munzona_2018.zip"
+    ),
+    discovery_required_headers=TSE_VOTE_DISCOVERY_REQUIRED_HEADERS,
+)
+
+VOTES_2022_DISCOVERY = TseResourceContract(
+    source="TSE",
+    dataset="votacao_candidato_munzona",
+    election_year=2022,
+    package_id="5db2c9ef-a63b-4c0c-a2ec-d08002f49897",
+    resource_id="40fdcf49-256a-4c81-87cf-711545bd1528",
+    ckan_api_base_url="https://dadosabertos.tse.jus.br/api/3/action",
+    artifact_name="votacao_candidato_munzona_2022.zip",
+    canonical_csv_name="votacao_candidato_munzona_2022_BRASIL.csv",
+    encoding="latin-1",
+    delimiter=";",
+    quotechar='"',
+    source_timezone="America/Sao_Paulo",
+    expected_mimetype="application/zip",
+    expected_headers=None,
+    fallback_download_url=(
+        "https://cdn.tse.jus.br/estatistica/sead/odsele/votacao_candidato_munzona/"
+        "votacao_candidato_munzona_2022.zip"
+    ),
+    discovery_required_headers=TSE_VOTE_DISCOVERY_REQUIRED_HEADERS,
+)
+
+_SUPPORTED_VOTE_DISCOVERY_CONTRACTS = {
+    2014: VOTES_2014_DISCOVERY,
+    2018: VOTES_2018_DISCOVERY,
+    2022: VOTES_2022_DISCOVERY,
+}
+SUPPORTED_VOTE_DISCOVERY_YEARS = tuple(sorted(_SUPPORTED_VOTE_DISCOVERY_CONTRACTS))
+
+
+def votes_discovery_contract_for_year(year: int) -> TseResourceContract:
+    """Return the schema-open official nominal-vote contract for one supported year."""
+
+    try:
+        return _SUPPORTED_VOTE_DISCOVERY_CONTRACTS[year]
+    except KeyError as exc:
+        raise ValueError(f"unsupported TSE votes discovery year: {year}") from exc
+
+
+VOTES_2014 = replace(
+    VOTES_2014_DISCOVERY,
+    expected_headers=TSE_VOTES_2014_HEADERS,
+)
+
+VOTES_2018 = replace(
+    VOTES_2018_DISCOVERY,
+    expected_headers=TSE_VOTES_2018_HEADERS,
+)
+
+VOTES_2022 = replace(
+    VOTES_2022_DISCOVERY,
+    expected_headers=TSE_VOTES_2022_HEADERS,
+)
+
+_SUPPORTED_VOTE_CONTRACTS = {
+    2014: VOTES_2014,
+    2018: VOTES_2018,
+    2022: VOTES_2022,
+}
+SUPPORTED_VOTE_YEARS = tuple(sorted(_SUPPORTED_VOTE_CONTRACTS))
+
+
+def votes_contract_for_year(year: int) -> TseResourceContract:
+    """Return the frozen official nominal-vote contract for one supported year."""
+
+    try:
+        return _SUPPORTED_VOTE_CONTRACTS[year]
+    except KeyError as exc:
+        raise ValueError(f"unsupported TSE votes year: {year}") from exc
 
